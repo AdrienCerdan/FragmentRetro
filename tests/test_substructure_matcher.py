@@ -69,7 +69,6 @@ TEST_CASES_FOR_CONVERT_TO_SMARTS = [
         "expected_smarts": "[#6&H3]-[#6@@H](-*)-[#7&H2]",
         "description": "Chirality and hydrogen after atomic number",
     },
-    # TODO: Add test cases for molecules with charges
 ]
 
 TEST_CASES_ADDH_TO_WILDCARD_NEIGHBORS = [
@@ -176,56 +175,33 @@ TEST_CASES_FOR_IS_STRICT_SUBSTRUCTURE = [
             "both chirality cases should be true for hydrogen as the dummy atom",
         ],
     },
-    # TODO: Add test cases for molecules with charges
 ]
 
 
 @pytest.mark.parametrize(
     "case_number, fragment_smiles, expected_smarts, description",
-    [
-        (
-            tc["case_number"],
-            tc["fragment_smiles"],
-            tc["expected_smarts"],
-            tc["description"],
-        )
-        for tc in TEST_CASES_FOR_CONVERT_TO_SMARTS
-    ],
+    [(tc["case_number"], tc["fragment_smiles"], tc["expected_smarts"], tc["description"]) for tc in TEST_CASES_FOR_CONVERT_TO_SMARTS],
 )
 def test_convert_to_smarts(case_number, fragment_smiles, expected_smarts, description):
+    # Clear cache to ensure clean test state
+    SubstructureMatcher.convert_to_smarts.cache_clear()
     result = SubstructureMatcher.convert_to_smarts(fragment_smiles)
     assert result == expected_smarts, f"Case {case_number} failed: {description}. Fragment SMILES: {fragment_smiles}"
 
 
 @pytest.mark.parametrize(
     "case_number, fragment_smarts, expected_smarts, description",
-    [
-        (
-            tc["case_number"],
-            tc["fragment_smarts"],
-            tc["expected_smarts"],
-            tc["description"],
-        )
-        for tc in TEST_CASES_ADDH_TO_WILDCARD_NEIGHBORS
-    ],
+    [(tc["case_number"], tc["fragment_smarts"], tc["expected_smarts"], tc["description"]) for tc in TEST_CASES_ADDH_TO_WILDCARD_NEIGHBORS],
 )
 def test_addH_to_wildcard_neighbors(case_number, fragment_smarts, expected_smarts, description):
+    SubstructureMatcher.addH_to_wildcard_neighbors.cache_clear()
     result = SubstructureMatcher.addH_to_wildcard_neighbors(fragment_smarts)
     assert result == expected_smarts, f"Case {case_number} failed: {description}"
 
 
 @pytest.mark.parametrize(
     "case_number, fragment_smiles, molecule_smiles_list, expected_list, descriptions",
-    [
-        (
-            tc["case_number"],
-            tc["fragment_smiles"],
-            tc["molecule_smiles_list"],
-            tc["expected_list"],
-            tc["descriptions"],
-        )
-        for tc in TEST_CASES_FOR_IS_STRICT_SUBSTRUCTURE
-    ],
+    [(tc["case_number"], tc["fragment_smiles"], tc["molecule_smiles_list"], tc["expected_list"], tc["descriptions"]) for tc in TEST_CASES_FOR_IS_STRICT_SUBSTRUCTURE],
 )
 def test_is_strict_substructure(case_number, fragment_smiles, molecule_smiles_list, expected_list, descriptions):
     for i in range(len(molecule_smiles_list)):
@@ -253,6 +229,36 @@ def test_parallel_get_substructure_BBs(fragment_smiles):
     assert no_parallel_matcher.get_substructure_BBs(fragment_smiles) == parallel_matcher.get_substructure_BBs(
         fragment_smiles
     ), f"Parallel and non-parallel results differ for fragment SMILES: {fragment_smiles}"
+
+
+def test_binary_mode_consistency():
+    """binary_mode should find a match iff full mode finds matches."""
+    bbs = {"CCCN", "CCCCN", "CCN", "CCCNC", "NCCCN"}
+    matcher = SubstructureMatcher(bbs)
+    fragment = "[4*]CCN"
+    full_result = matcher.get_substructure_BBs(fragment, binary_mode=False)
+    binary_result = matcher.get_substructure_BBs(fragment, binary_mode=True)
+    assert (len(full_result) > 0) == (len(binary_result) > 0)
+    assert binary_result.issubset(full_result)
+
+
+def test_has_any_substructure_bb():
+    """has_any_substructure_BB should agree with get_substructure_BBs."""
+    bbs = {"CCCN", "CCCCN", "CCO"}
+    matcher = SubstructureMatcher(bbs)
+    assert matcher.has_any_substructure_BB("[4*]CCN") is True
+    assert matcher.has_any_substructure_BB("[4*]CCS") is False
+
+
+def test_lru_cache_works():
+    """Verify that repeated calls to convert_to_smarts use cache."""
+    SubstructureMatcher.convert_to_smarts.cache_clear()
+    smiles = "[4*]CCN[5*]"
+    r1 = SubstructureMatcher.convert_to_smarts(smiles)
+    r2 = SubstructureMatcher.convert_to_smarts(smiles)
+    assert r1 == r2
+    info = SubstructureMatcher.convert_to_smarts.cache_info()
+    assert info.hits >= 1
 
 
 if __name__ == "__main__":

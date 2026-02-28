@@ -1,3 +1,4 @@
+import functools
 import re
 from multiprocessing import Pool, cpu_count
 from typing import cast
@@ -46,6 +47,7 @@ class SubstructureMatcher:
         return dummy_neighbor
 
     @staticmethod
+    @functools.lru_cache(maxsize=4096)
     def convert_to_smarts(fragment_smiles: str) -> str:
         """
         Convert a fragment SMILES string into a SMARTS string with hydrogen counts
@@ -83,6 +85,7 @@ class SubstructureMatcher:
         return smarts
 
     @staticmethod
+    @functools.lru_cache(maxsize=4096)
     def addH_to_wildcard_neighbors(fragment_smarts: str) -> str:
         """
         Adjust SMARTS by adding hydrogens to neighbors of wildcard atoms (*).
@@ -93,8 +96,6 @@ class SubstructureMatcher:
         Returns:
             Adjusted SMARTS string with explicit hydrogen counts for neighbors of wildcards.
         """
-        # TODO: make sure this works properly and see if we want to merge this with convert_to_smarts
-
         # Convert SMARTS to molecule
         fragment_mol = Chem.MolFromSmarts(fragment_smarts)
         if fragment_mol is None:
@@ -148,34 +149,54 @@ class SubstructureMatcher:
         Returns:
             True if the fragment is a strict substructure of the molecule, False otherwise.
         """
-        # Convert fragment SMILES to SMARTS pattern
-        # hydrogen counts are explicitly specified to strictly match the fragment
+        # Convert fragment SMILES to SMARTS pattern (cached)
         fragment_smarts = SubstructureMatcher.convert_to_smarts(fragment_smiles)
-        # Add hydrogen atoms to wildcard neighbors to ensure hydrogen atoms can match with wildcard atoms
+        # Add hydrogen atoms to wildcard neighbors (cached)
         fragment_smarts_withH = SubstructureMatcher.addH_to_wildcard_neighbors(fragment_smarts)
 
-        # Convert molecule SMILES to RDKit molecule object
-        # fragment_mol = Chem.MolFromSmarts(fragment_smarts)
         fragment_mol_withH = Chem.MolFromSmarts(fragment_smarts_withH)
         molecule_mol = Chem.MolFromSmiles(molecule_smiles)
-        # to make sure hydrogen atoms can match with wildcard atoms
         molecule_mol = Chem.AddHs(molecule_mol)
 
         if molecule_mol is None:
             raise ValueError(f"Invalid SMILES string: {molecule_smiles}")
         return cast(bool, molecule_mol.HasSubstructMatch(fragment_mol_withH, useChirality=useChirality))
 
-    def get_substructure_BBs(self, fragment: str) -> BBsType:
-        """
-        Get the set of building blocks (BBs) that the fragment matches.
+    def has_any_substructure_BB(self, fragment: str) -> bool:
+        """Check if at least one BB matches the fragment (early termination for binary scoring).
 
         Args:
             fragment: SMILES string of the fragment.
 
         Returns:
+            True if any BB contains the fragment as a substructure.
+        """
+        for bb in self.BBs:
+            if self.is_strict_substructure(fragment, bb, self.useChirality):
+                return True
+        return False
+
+    def get_substructure_BBs(self, fragment: str, binary_mode: bool = False) -> BBsType:
+        """
+        Get the set of building blocks (BBs) that the fragment matches.
+
+        Args:
+            fragment: SMILES string of the fragment.
+            binary_mode: If True, return a set with a single BB as soon as one match is found.
+                         Much faster when you only need to know if a match exists.
+
+        Returns:
             Set of building block SMILES strings that the fragment matches.
         """
         logger.debug(f"[SubstructureMatcher] Matching fragment {fragment} to building blocks")
+
+        if binary_mode:
+            # Early termination: return first match only
+            for bb in self.BBs:
+                if self.is_strict_substructure(fragment, bb, self.useChirality):
+                    return {bb}
+            return set()
+
         if self.parallelize and len(self.BBs) >= self.num_cores * self.core_factor:
             logger.debug(f"[SubstructureMatcher] Using {self.num_cores} cores for parallel processing")
             with Pool(processes=self.num_cores) as pool:
