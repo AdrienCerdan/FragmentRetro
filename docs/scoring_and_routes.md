@@ -353,3 +353,205 @@ python -m pytest tests/ -v -k "not parallel"
 | `reaction_mapping.py` | BRICS bond-type → named reaction class mapping |
 | `batch.py` | `score_batch_binary()`, `score_batch_continuous()`, `score_batch_with_dag()` |
 | `substructure_matcher.py` | Cached SMARTS conversion, binary mode matching |
+| `reaction_library.py` | `Reaction`, `ReactionLibrary` — SMARTS-based reaction catalogs |
+| `constraints.py` | `ConstraintConfig`, `build_constraints()` — reaction constraint system |
+| `smarts_retro.py` | `SmartsRetrosynthesis`, `RetroSynthNode` — standalone SMARTS retrosynthesis |
+
+---
+
+## 8. SMARTS Reaction Library
+
+FragmentRetro includes a SMARTS-based reaction library system that provides chemically
+validated reaction patterns for retrosynthetic analysis, bond disconnection validation,
+and constrained scoring.
+
+### 8.1 Built-in Catalogs
+
+Two literature-curated catalogs are bundled:
+
+**Hartenfeller 58** — 58 robust named reactions from Hartenfeller et al. (J. Chem. Inf.
+Model. 2011, 51, 3093). Includes Suzuki, Negishi, Buchwald-Hartwig, Heck, Sonogashira,
+Wittig, Grignard, Mitsunobu, Schotten-Baumann, Pictet-Spengler, Fischer indole,
+Friedländer quinoline, reductive amination, nucleophilic aromatic substitution,
+and 40+ heterocycle-forming reactions.
+
+**eXplore Cookbook** — 33 reactions from the BioSolveIT/eMolecules eXplore Chemical
+Space platform. Organised by type: couplings, substitutions, ring closures,
+multicomponent reactions, and core reactions.
+
+```python
+from fragmentretro.reaction_library import ReactionLibrary
+
+lib = ReactionLibrary.default()          # Both catalogs (91 reactions)
+lib = ReactionLibrary.from_hartenfeller() # Hartenfeller only (58)
+lib = ReactionLibrary.from_explore()      # eXplore only (33)
+```
+
+### 8.2 Custom User Reactions
+
+Users can define additional reactions in JSON format and load them alongside or
+instead of the built-in catalogs:
+
+```json
+{
+  "reactions": [
+    {
+      "id": "my_rxn_001",
+      "name": "my_special_coupling",
+      "class": "coupling",
+      "product_class": "biaryl",
+      "smarts_forward": "[c:1]B(O)O.[c:2][Br]>>[c:1][c:2]",
+      "num_reactants": 2,
+      "reliability": 0.95,
+      "notes": "Optimised conditions from our lab"
+    }
+  ]
+}
+```
+
+```python
+lib = ReactionLibrary.default()
+lib.load_json("my_reactions.json", source="my_lab")
+```
+
+### 8.3 Filtering
+
+```python
+suzuki = lib.filter(names=["Suzuki"])
+couplings = lib.filter(classes=["coupling"])
+reliable = lib.filter(min_reliability=0.9)
+combined = lib.filter(classes=["coupling"], min_reliability=0.85, sources=["hartenfeller"])
+```
+
+### 8.4 SMARTS Product Matching
+
+Given a product SMILES, find which reactions could have produced it:
+
+```python
+matches = lib.find_matching_reactions("c1ccc(-c2ccccc2)cc1", top_k=5)
+for rxn, score in matches:
+    print(f"{rxn.name}: {score:.2f}")
+```
+
+### 8.5 Bond Disconnection Validation
+
+Validate whether a retrosynthetic disconnection matches a known reaction:
+
+```python
+is_valid, rxn, score = lib.validate_bond_disconnection(
+    "c1ccc(-c2ccccc2)cc1",   # parent
+    ["c1ccccc1", "c1ccccc1"], # children
+)
+```
+
+---
+
+## 9. Constraint System
+
+The constraint system supports both simple keyword parameters (for common cases)
+and a `ConstraintConfig` dataclass (for complex specifications).
+
+### 9.1 Simple Parameters
+
+```python
+from fragmentretro.scoring import compute_score_validated
+
+score = compute_score_validated(
+    smiles, cf, lib,
+    allowed_reactions=["Suzuki", "amide_coupling"],
+    max_steps=3,
+    max_lls=2,
+)
+```
+
+### 9.2 ConstraintConfig
+
+```python
+from fragmentretro.constraints import ConstraintConfig
+
+config = ConstraintConfig(
+    allowed_reactions=["Suzuki", "amide_coupling", "Sonogashira"],
+    blocked_reactions=["Grignard"],
+    allowed_classes=["coupling"],
+    max_steps=3,
+    max_lls=2,
+    min_reliability=0.8,
+    require_all_validated=True,
+)
+
+score = compute_score_validated(smiles, cf, lib, constraints=config)
+```
+
+### 9.3 Available Constraint Fields
+
+| Field | Type | Effect |
+|-------|------|--------|
+| `allowed_reactions` | `list[str]` | Whitelist (partial match, case-insensitive) |
+| `blocked_reactions` | `list[str]` | Blacklist (overrides whitelist) |
+| `allowed_classes` | `list[str]` | Whitelist by reaction class |
+| `blocked_classes` | `list[str]` | Blacklist by reaction class |
+| `max_steps` | `int` | Maximum total synthesis steps |
+| `max_lls` | `int` | Maximum longest linear sequence |
+| `min_reliability` | `float` | Minimum per-reaction reliability |
+| `max_reactants` | `int` | Max reactants per step |
+| `require_all_validated` | `bool` | Every bond must match a library reaction |
+
+---
+
+## 10. Tiered Scoring
+
+### Tier 1: BRICS-only (fast, existing)
+
+```python
+score = compute_score(smiles, cf)               # binary/continuous
+result = compute_score_with_dag(smiles, cf)      # + DAG metrics
+```
+
+### Tier 2: BRICS + SMARTS validation (recommended)
+
+Runs BRICS fragmentation, builds the DAG, then validates each disconnection
+against the reaction library. Adds a `validation_weight` component measuring
+what fraction of bonds match real reactions, weighted by reliability.
+
+```python
+result = compute_score_validated(smiles, cf, lib,
+    allowed_reactions=["Suzuki"],
+    max_steps=3,
+)
+# result.matched_reactions → [("Suzuki", 0.9), ...]
+# result.validation_coverage → 0.75
+# result.constraints_satisfied → True
+```
+
+### Tier 3: SMARTS-only retrosynthesis (broadest)
+
+Applies reaction SMARTS in reverse without BRICS, covering reactions BRICS
+cannot represent (Pictet-Spengler, Fischer indole, Ugi 4CR, click chemistry).
+
+```python
+score = compute_score_smarts(smiles, cf, lib,
+    allowed_reactions=["Suzuki"],
+    max_depth=2, max_nodes=200,
+)
+```
+
+---
+
+## 11. Standalone SMARTS Retrosynthesis
+
+For direct retrosynthetic tree exploration:
+
+```python
+from fragmentretro.smarts_retro import SmartsRetrosynthesis
+
+retro = SmartsRetrosynthesis(lib, max_depth=3, max_nodes=500)
+routes = retro.retrosynthesise(target_smiles, is_purchasable=my_check)
+
+for route in routes:
+    print(route.pretty_print())
+    print(route.to_dict())  # JSON-serialisable
+```
+
+Properties of `RetroSynthNode`: `smiles`, `children`, `reaction`, `depth`,
+`is_building_block`, `is_solved`, `num_steps`, `longest_linear_sequence`,
+`num_leaves`, `avg_reliability`.
