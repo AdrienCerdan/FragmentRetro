@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
-from fragmentretro.scoring import compute_score, is_feasible, load_compound_filter
+from fragmentretro.scoring import compute_score, is_feasible, load_compound_filter, compute_score_with_dag, DAGScoreResult
 from fragmentretro.utils.filter_compound import precompute_properties
 
 
@@ -50,6 +50,39 @@ def test_compute_score_higher_for_simpler(compound_filter):
     score_simple = compute_score("CCN", compound_filter)
     # If both are 0, both are unsolvable with this tiny BB set — that's ok
     assert score_simple >= 0.0
+
+
+def test_dag_score_returns_result(compound_filter):
+    """compute_score_with_dag should return a DAGScoreResult."""
+    result = compute_score_with_dag("CCN", compound_filter)
+    assert isinstance(result, DAGScoreResult)
+    assert 0.0 <= result.score <= 1.0
+
+
+def test_dag_score_infeasible(compound_filter):
+    """Infeasible molecule should return feasible=False."""
+    result = compute_score_with_dag("C1CC2CCCC3CCCC1C23", compound_filter)
+    assert result.feasible is False
+    assert result.score == 0.0
+    assert result.dag is None
+
+
+def test_dag_score_has_metrics(compound_filter):
+    """Feasible molecule should have route metrics populated."""
+    result = compute_score_with_dag("CCN", compound_filter)
+    if result.feasible:
+        assert result.num_building_blocks >= 1
+        assert result.longest_linear_sequence >= 0
+        assert 0.0 <= result.convergence_score <= 1.0
+        assert result.total_steps >= 0
+
+
+def test_dag_score_vs_compute_score(compound_filter):
+    """DAG score and compute_score should both be 0 for infeasible, both > 0 for feasible."""
+    for smi in ["CCN", "C1CC2CCCC3CCCC1C23"]:
+        basic = compute_score(smi, compound_filter)
+        dag_result = compute_score_with_dag(smi, compound_filter)
+        assert (basic > 0) == dag_result.feasible
 
 
 if __name__ == "__main__":

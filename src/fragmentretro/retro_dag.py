@@ -60,10 +60,51 @@ class RetroNode:
 
     @property
     def num_steps(self) -> int:
-        """Total number of synthetic steps in this subtree."""
+        """Total number of synthetic steps (edges) in this subtree."""
         if self.is_leaf:
             return 0
-        return 1 + max(c.num_steps for c in self.children)
+        return 1 + sum(c.num_steps for c in self.children)
+
+    @property
+    def longest_linear_sequence(self) -> int:
+        """Longest linear sequence (LLS): max depth from root to any leaf.
+
+        This is the critical path — the minimum number of sequential steps
+        needed even with unlimited parallel capacity.
+        """
+        if self.is_leaf:
+            return 0
+        return 1 + max(c.longest_linear_sequence for c in self.children)
+
+    @property
+    def num_leaves(self) -> int:
+        """Number of leaf nodes (building blocks)."""
+        if self.is_leaf:
+            return 1
+        return sum(c.num_leaves for c in self.children)
+
+    @property
+    def convergence_score(self) -> float:
+        """How convergent the synthesis is, in [0, 1].
+
+        1.0 = maximally convergent (balanced binary tree, LLS = log2(leaves))
+        0.0 = fully linear (chain, LLS = leaves - 1)
+
+        For a single BB (no steps), returns 1.0.
+        For 2 BBs (1 step), always returns 1.0 (no choice to make).
+        """
+        n_leaves = self.num_leaves
+        if n_leaves <= 2:
+            return 1.0
+        lls = self.longest_linear_sequence
+        # Worst case (linear): LLS = n_leaves - 1
+        # Best case (balanced): LLS = ceil(log2(n_leaves))
+        import math
+        best_lls = math.ceil(math.log2(n_leaves))
+        worst_lls = n_leaves - 1
+        if worst_lls == best_lls:
+            return 1.0
+        return (worst_lls - lls) / (worst_lls - best_lls)
 
     def to_dict(self) -> dict:
         """Serialize to a nested dictionary."""
@@ -84,6 +125,14 @@ class RetroNode:
             d["bb_smiles"] = sorted(self.bb_smiles)
         if self.children:
             d["children"] = [c.to_dict() for c in self.children]
+        # Include synthesis metrics at root
+        if self.depth == 0:
+            d["metrics"] = {
+                "total_steps": self.num_steps,
+                "longest_linear_sequence": self.longest_linear_sequence,
+                "num_building_blocks": self.num_leaves,
+                "convergence_score": round(self.convergence_score, 3),
+            }
         return d
 
     def pretty_print(self, indent: int = 0) -> str:
@@ -101,6 +150,13 @@ class RetroNode:
             lines.append(f"{prefix}   BBs: {bb_list}{suffix}")
         for child in self.children:
             lines.append(child.pretty_print(indent + 1))
+        # Show metrics at root
+        if indent == 0 and not self.is_leaf:
+            lines.append(f"\n--- Synthesis metrics ---")
+            lines.append(f"Total steps: {self.num_steps}")
+            lines.append(f"Longest linear sequence (LLS): {self.longest_linear_sequence}")
+            lines.append(f"Building blocks: {self.num_leaves}")
+            lines.append(f"Convergence: {self.convergence_score:.2f} (1.0=fully convergent, 0.0=fully linear)")
         return "\n".join(lines)
 
 
@@ -274,9 +330,10 @@ def build_best_dag(
     fragmenter: Fragmenter,
     comb_bbs_dict: CombBBsDictType,
 ) -> RetroNode:
-    """Build the single best DAG ranked by average bond feasibility.
+    """Build the single best DAG ranked by bond feasibility and convergence.
 
-    Prefers routes that cut the most feasible (easiest) bonds first.
+    Prefers routes that are more convergent (lower LLS) and cut
+    the most feasible (easiest) bonds.
 
     Args:
         solution: A retrosynthesis solution.
@@ -292,17 +349,24 @@ def build_best_dag(
         raise ValueError("No valid DAGs could be built for this solution")
 
     def _score_route(node: RetroNode) -> float:
-        """Average bond feasibility across all cuts in the tree."""
-        if node.is_leaf:
-            return 1.0
-        scores = []
-        if node.bond_type:
-            scores.append(get_bond_feasibility(node.bond_type[0], node.bond_type[1]))
-        for child in node.children:
-            scores.append(_score_route(child))
-        return sum(scores) / len(scores) if scores else 0.0
+        """Score combining bond feasibility (60%) and convergence (40%)."""
+        # Bond feasibility component
+        bond_scores: list[float] = []
+        _collect_bond_scores(node, bond_scores)
+        avg_bond = sum(bond_scores) / len(bond_scores) if bond_scores else 1.0
+        # Convergence component
+        conv = node.convergence_score
+        return 0.6 * avg_bond + 0.4 * conv
 
     return max(routes, key=_score_route)
+
+
+def _collect_bond_scores(node: RetroNode, acc: list[float]) -> None:
+    """Recursively collect bond feasibility scores from all cuts."""
+    if node.bond_type:
+        acc.append(get_bond_feasibility(node.bond_type[0], node.bond_type[1]))
+    for child in node.children:
+        _collect_bond_scores(child, acc)
 
 
 def build_dag_from_retrosynthesis(

@@ -63,6 +63,9 @@ def test_internal_node():
     )
     assert parent.is_leaf is False
     assert parent.num_steps == 1
+    assert parent.longest_linear_sequence == 1
+    assert parent.num_leaves == 2
+    assert parent.convergence_score == 1.0  # 2 leaves, always 1.0
 
 
 def test_to_dict_roundtrip():
@@ -212,6 +215,59 @@ def test_multiple_routes_differ(three_frag_fragmenter):
         for dag in dags:
             structures.add(_route_signature(dag))
         assert len(structures) >= 2
+
+
+def test_convergence_linear_vs_balanced():
+    """A linear chain of 4 leaves should score lower than balanced."""
+    # Linear: root -> (A, root2) -> (B, root3) -> (C, D)
+    d = RetroNode(smiles="D", fragments=((3,),), depth=3)
+    c = RetroNode(smiles="C", fragments=((2,),), depth=3)
+    cd = RetroNode(smiles="CD", fragments=((2,), (3,)), children=[c, d], bond_type=("4", "5"), depth=2)
+    b = RetroNode(smiles="B", fragments=((1,),), depth=2)
+    bcd = RetroNode(smiles="BCD", fragments=((1,), (2,), (3,)), children=[b, cd], bond_type=("1", "5"), depth=1)
+    a = RetroNode(smiles="A", fragments=((0,),), depth=1)
+    linear_root = RetroNode(
+        smiles="ABCD", fragments=((0,), (1,), (2,), (3,)),
+        children=[a, bcd], bond_type=("3", "4"), depth=0,
+    )
+
+    # Balanced: root -> (AB, CD), AB -> (A, B), CD -> (C, D)
+    a2 = RetroNode(smiles="A", fragments=((0,),), depth=2)
+    b2 = RetroNode(smiles="B", fragments=((1,),), depth=2)
+    ab = RetroNode(smiles="AB", fragments=((0,), (1,)), children=[a2, b2], bond_type=("3", "4"), depth=1)
+    c2 = RetroNode(smiles="C", fragments=((2,),), depth=2)
+    d2 = RetroNode(smiles="D", fragments=((3,),), depth=2)
+    cd2 = RetroNode(smiles="CD", fragments=((2,), (3,)), children=[c2, d2], bond_type=("4", "5"), depth=1)
+    balanced_root = RetroNode(
+        smiles="ABCD", fragments=((0,), (1,), (2,), (3,)),
+        children=[ab, cd2], bond_type=("1", "5"), depth=0,
+    )
+
+    assert linear_root.num_leaves == balanced_root.num_leaves == 4
+    assert linear_root.longest_linear_sequence == 3  # linear chain
+    assert balanced_root.longest_linear_sequence == 2  # balanced
+    assert balanced_root.convergence_score > linear_root.convergence_score
+    assert balanced_root.convergence_score == 1.0  # perfectly balanced
+    assert linear_root.convergence_score == 0.0  # fully linear
+
+
+def test_to_dict_includes_metrics():
+    """Root-level to_dict should include synthesis metrics."""
+    child1 = RetroNode(smiles="CC", fragments=((0,),), depth=1)
+    child2 = RetroNode(smiles="N", fragments=((1,),), depth=1)
+    root = RetroNode(
+        smiles="CCN", fragments=((0,), (1,)),
+        children=[child1, child2],
+        bond_type=("4", "5"),
+        reaction_info=get_reaction_info("4", "5"),
+        depth=0,
+    )
+    d = root.to_dict()
+    assert "metrics" in d
+    assert d["metrics"]["total_steps"] == 1
+    assert d["metrics"]["longest_linear_sequence"] == 1
+    assert d["metrics"]["num_building_blocks"] == 2
+    assert d["metrics"]["convergence_score"] == 1.0
 
 
 # --- Helpers ---
