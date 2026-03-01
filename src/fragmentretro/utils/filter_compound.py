@@ -173,6 +173,20 @@ class CompoundFilter:
 
         return filtered_indices
 
+    def has_match(self, smiles: str) -> bool:
+        """Check if a SMILES has at least one matching building block.
+
+        This is a convenience method for purchasability checking, used by
+        the SMARTS retrosynthesis engine (Tier 3 scoring).
+
+        Args:
+            smiles: Query SMILES string.
+
+        Returns:
+            True if at least one BB matches.
+        """
+        return len(self.filter_compounds(smiles)) > 0
+
     def get_filtered_BBs(
         self, smiles: str, prefiltered_indices: FilterIndicesType | None = None
     ) -> tuple[FilterIndicesType, BBsType]:
