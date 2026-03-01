@@ -146,6 +146,38 @@ class Reaction:
         return results
 
 
+def _strip_dummy_atoms(smiles: str) -> Optional[str]:
+    """Strip dummy atoms (atomic number 0) from a SMILES and return canonical core.
+
+    Handles both BRICS dummy atoms ([16*], [1*], etc.) and SMARTS dummy atoms (*).
+    Returns None if the result is empty or invalid.
+    """
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        return None
+
+    # Check if there are any dummy atoms to strip
+    dummy_idxs = [a.GetIdx() for a in mol.GetAtoms() if a.GetAtomicNum() == 0]
+    if not dummy_idxs:
+        # No dummies — return canonical SMILES directly
+        return Chem.MolToSmiles(mol)
+
+    from rdkit.Chem import RWMol
+    rw = RWMol(mol)
+    for idx in sorted(dummy_idxs, reverse=True):
+        rw.RemoveAtom(idx)
+
+    clean = rw.GetMol()
+    if clean.GetNumAtoms() == 0:
+        return None
+
+    try:
+        Chem.SanitizeMol(clean)
+        return Chem.MolToSmiles(clean)
+    except Exception:
+        return None
+
+
 class ReactionLibrary:
     """A filterable collection of Reaction objects.
 
@@ -369,6 +401,10 @@ class ReactionLibrary:
         Tests if any reaction in the library, applied in reverse to parent_smiles,
         could produce fragments matching child_smiles_list.
 
+        Handles dummy atoms in both BRICS fragment SMILES (e.g., [16*]c1ccccc1)
+        and reverse reaction products (e.g., *c1ccccc1) by comparing molecular
+        cores after stripping all dummy atoms.
+
         Args:
             parent_smiles: SMILES of the molecule being disconnected.
             child_smiles_list: SMILES of the resulting fragments.
@@ -381,13 +417,13 @@ class ReactionLibrary:
         if parent_mol is None:
             return False, None, 0.0
 
-        child_fps = set()
+        child_cores = set()
         for cs in child_smiles_list:
-            m = Chem.MolFromSmiles(cs)
-            if m is not None:
-                child_fps.add(Chem.MolToSmiles(m))  # canonical
+            core = _strip_dummy_atoms(cs)
+            if core:
+                child_cores.add(core)
 
-        if not child_fps:
+        if not child_cores:
             return False, None, 0.0
 
         best_rxn: Optional[Reaction] = None
@@ -401,16 +437,16 @@ class ReactionLibrary:
             # Try reverse application
             reactant_sets = rxn.apply_reverse(parent_smiles)
             for reactants in reactant_sets:
-                reactant_canonical = set()
+                reactant_cores = set()
                 for r in reactants:
-                    rm = Chem.MolFromSmiles(r)
-                    if rm is not None:
-                        reactant_canonical.add(Chem.MolToSmiles(rm))
+                    core = _strip_dummy_atoms(r)
+                    if core:
+                        reactant_cores.add(core)
 
-                # Check overlap: at least one child matches a reactant
-                overlap = child_fps & reactant_canonical
+                # Check overlap on molecular cores
+                overlap = child_cores & reactant_cores
                 if overlap:
-                    coverage = len(overlap) / len(child_fps)
+                    coverage = len(overlap) / len(child_cores)
                     score = rxn.reliability * coverage
                     if score > best_score:
                         best_score = score

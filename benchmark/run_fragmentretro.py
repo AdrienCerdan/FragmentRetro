@@ -147,8 +147,10 @@ def run_tier3(smiles, cf, lib, timeout, max_depth=3, max_nodes=500):
                     "reaction": r.reaction.name if r.reaction else None,
                 })
 
+        best_route_solved = (routes_info[0]["solved"] if routes_info else False)
+
         return {
-            "tier": "3_smarts", "solved": score > 0,
+            "tier": "3_smarts", "solved": best_route_solved,
             "score": round(score, 6),
             "n_routes": len(routes_info),
             "best_route": routes_info[0] if routes_info else None,

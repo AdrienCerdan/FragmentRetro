@@ -515,6 +515,30 @@ class TestBondValidation:
         assert isinstance(is_valid, bool)
         assert isinstance(score, float)
 
+    def test_validate_with_brics_dummy_atoms(self, default_lib):
+        """BRICS fragments with [16*] dummy atoms must still match reactions.
+
+        Regression: BRICS DAG children contain dummy atoms like [16*]c1ccccc1
+        while reverse SMARTS products have * dummy atoms. Both must be stripped
+        for core comparison.
+        """
+        is_valid, rxn, score = default_lib.validate_bond_disconnection(
+            "c1ccc(-c2ccccc2)cc1",
+            ["[16*]c1ccccc1", "[16*]c1ccccc1"],
+        )
+        assert is_valid, "Should match Suzuki despite BRICS dummy atoms"
+        assert rxn is not None
+        assert "suzuki" in rxn.name.lower() or "Suzuki" in rxn.name
+        assert score > 0.5
+
+    def test_validate_with_generic_dummy_atoms(self, default_lib):
+        """Fragments with generic * dummy atoms must also match."""
+        is_valid, rxn, score = default_lib.validate_bond_disconnection(
+            "c1ccc(-c2ccccc2)cc1",
+            ["*c1ccccc1", "*c1ccccc1"],
+        )
+        assert is_valid, "Should match despite generic * dummy atoms"
+
     def test_validate_invalid_smiles(self, default_lib):
         is_valid, rxn, score = default_lib.validate_bond_disconnection(
             "not_valid", ["also_bad"]

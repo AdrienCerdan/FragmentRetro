@@ -170,7 +170,7 @@ def run_single(finder, smiles, time_limit):
         return {
             "solved": solved,
             "n_routes": n_routes,
-            "n_solved_routes": sum(1 for r in finder.routes if r.is_solved) if n_routes > 0 else 0,
+            "n_solved_routes": len(solved_routes) if n_routes > 0 else 0,
             "time_s": round(search_time, 4),
             "best_route": best_route,
         }
