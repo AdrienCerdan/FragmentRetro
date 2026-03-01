@@ -17,6 +17,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
+import re
+
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
@@ -26,6 +28,29 @@ from fragmentretro.utils.logging_config import logger
 _DATA_DIR = Path(__file__).parent / "data"
 HARTENFELLER_PATH = _DATA_DIR / "hartenfeller_reactions.json"
 EXPLORE_PATH = _DATA_DIR / "explore_reactions.json"
+
+
+def _replace_dummy_atoms(smiles: str) -> str | None:
+    """Replace dummy atoms in a SMILES with hydrogen and re-canonicalize.
+
+    Dummy atoms ('*') arise when reverse SMARTS application cannot resolve
+    ambiguous atom patterns (e.g., [Cl,Br,I] becomes '*').  Replacing with
+    hydrogen gives the molecular core, which is appropriate for substructure-
+    based purchasability checks against a building-block catalog.
+
+    Args:
+        smiles: SMILES that may contain '*' atoms.
+
+    Returns:
+        Canonical SMILES without dummy atoms, or None if sanitization fails.
+    """
+    # Replace bracketed forms [1*], [*] and bare *
+    cleaned = re.sub(r"\[\d*\*\]", "[H]", smiles)
+    cleaned = re.sub(r"(?<!\[)\*(?!\])", "[H]", cleaned)
+    mol = Chem.MolFromSmiles(cleaned)
+    if mol is None:
+        return None
+    return Chem.MolToSmiles(mol)
 
 
 @dataclass(frozen=True)
@@ -99,6 +124,10 @@ class Reaction:
     def apply_reverse(self, product_smiles: str) -> list[tuple[str, ...]]:
         """Apply the reaction in reverse to get possible reactant sets.
 
+        Dummy atoms ('*') produced by unresolved SMARTS patterns are replaced
+        with hydrogen and the result is re-canonicalized, so that downstream
+        purchasability checks work correctly.
+
         Args:
             product_smiles: SMILES of the product molecule.
 
@@ -128,11 +157,17 @@ class Reaction:
                 try:
                     Chem.SanitizeMol(p)
                     smi = Chem.MolToSmiles(p)
-                    if smi:
-                        reactant_smiles.append(smi)
-                    else:
+                    if not smi:
                         valid = False
                         break
+                    # Replace dummy atoms produced by unresolved SMARTS patterns
+                    # (e.g., [Cl,Br,I] -> *) with hydrogen, then re-canonicalize
+                    if '*' in smi:
+                        smi = _replace_dummy_atoms(smi)
+                        if smi is None:
+                            valid = False
+                            break
+                    reactant_smiles.append(smi)
                 except Exception:
                     valid = False
                     break

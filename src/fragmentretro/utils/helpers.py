@@ -59,13 +59,21 @@ def sort_by_heavy_atoms(smiles_list: list[str]) -> list[str]:
 def replace_dummy_atoms_regex(smiles: str) -> str:
     """Replaces dummy atoms ('*') in a SMILES string with explicit hydrogen ('H') using regex.
 
+    Handles both bracketed forms (e.g., '[1*]', '[*]') and bare '*' atoms
+    that arise from reverse SMARTS application.
+
     Args:
         smiles: The SMILES string containing dummy atoms.
 
     Returns:
-        A SMILES string where '[{int}*]' is replaced with '[H]'.
+        A SMILES string where dummy atoms are replaced with '[H]',
+        then re-canonicalized.
     """
-    return canonicalize_smiles(re.sub(r"\[\d*\*\]", "[H]", smiles))
+    # 1. Replace bracketed dummy atoms: [1*], [2*], [*] -> [H]
+    result = re.sub(r"\[\d*\*\]", "[H]", smiles)
+    # 2. Replace bare dummy atoms: * (not inside brackets) -> [H]
+    result = re.sub(r"(?<!\[)\*(?!\])", "[H]", result)
+    return canonicalize_smiles(result)
 
 
 def remove_indices_before_dummy(smiles: str) -> str:

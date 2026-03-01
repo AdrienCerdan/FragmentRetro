@@ -250,6 +250,26 @@ class TestReactionSmarts:
         for reactants in results:
             assert len(reactants) == 2
 
+    def test_apply_reverse_no_dummy_atoms(self, default_lib):
+        """Regression: apply_reverse must never output dummy atoms ('*').
+
+        Reverse SMARTS can produce '*' when ambiguous patterns like [Cl,Br,I]
+        cannot resolve. These must be sanitized before returning.
+        """
+        test_molecules = [
+            "c1ccc(-c2ccccc2)cc1",  # biphenyl
+            "CC(=O)Nc1ccccc1",      # acetanilide
+            "Oc1ccc(-c2ccccc2)cc1", # 4-hydroxybiphenyl
+        ]
+        for smi in test_molecules:
+            for rxn in default_lib.reactions:
+                results = rxn.apply_reverse(smi)
+                for reactants in results:
+                    for r in reactants:
+                        assert '*' not in r, (
+                            f"Dummy atom in output of {rxn.name} on {smi}: {r}"
+                        )
+
     def test_apply_reverse_invalid_smiles(self, suzuki_reaction):
         results = suzuki_reaction.apply_reverse("invalid_smiles")
         assert results == []
@@ -599,3 +619,34 @@ class TestReactionLibraryMisc:
     def test_getitem(self, hartenfeller_lib):
         rxn = hartenfeller_lib["hartenfeller_31"]
         assert rxn.name == "Suzuki"
+
+
+# ============================================================================
+# Dummy atom sanitization
+# ============================================================================
+
+class TestDummyAtomSanitization:
+    """Regression tests for dummy atom handling."""
+
+    def test_replace_dummy_bare_star(self):
+        from fragmentretro.utils.helpers import replace_dummy_atoms_regex
+        result = replace_dummy_atoms_regex("*c1ccccc1")
+        assert "*" not in result
+        assert result == "c1ccccc1"
+
+    def test_replace_dummy_bracketed(self):
+        from fragmentretro.utils.helpers import replace_dummy_atoms_regex
+        result = replace_dummy_atoms_regex("[1*]c1ccccc1")
+        assert "*" not in result
+
+    def test_replace_dummy_mixed(self):
+        from fragmentretro.utils.helpers import replace_dummy_atoms_regex
+        result = replace_dummy_atoms_regex("*CC[2*]")
+        assert "*" not in result
+
+    def test_replace_dummy_internal(self):
+        from fragmentretro.reaction_library import _replace_dummy_atoms
+        assert _replace_dummy_atoms("*c1ccccc1") == "c1ccccc1"
+        assert _replace_dummy_atoms("*CCN1CCCC1") is not None
+        assert "*" not in _replace_dummy_atoms("*CCN1CCCC1")
+        assert _replace_dummy_atoms("CCO") == "CCO"  # no dummy, unchanged
