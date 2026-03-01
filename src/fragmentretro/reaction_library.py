@@ -38,17 +38,26 @@ def _replace_dummy_atoms(smiles: str) -> str | None:
     hydrogen gives the molecular core, which is appropriate for substructure-
     based purchasability checks against a building-block catalog.
 
+    Fragments with fewer than 2 heavy atoms after replacement are discarded
+    as artifacts of spurious SMARTS matches (e.g., Suzuki matching at an
+    alkyl–aryl bond yields '*[C]' → '[CH]', which is chemically nonsensical
+    as a building block).
+
     Args:
         smiles: SMILES that may contain '*' atoms.
 
     Returns:
-        Canonical SMILES without dummy atoms, or None if sanitization fails.
+        Canonical SMILES without dummy atoms, or None if the result is
+        chemically invalid or too small to be a meaningful building block.
     """
     # Replace bracketed forms [1*], [*] and bare *
     cleaned = re.sub(r"\[\d*\*\]", "[H]", smiles)
     cleaned = re.sub(r"(?<!\[)\*(?!\])", "[H]", cleaned)
     mol = Chem.MolFromSmiles(cleaned)
     if mol is None:
+        return None
+    # Discard single-atom fragments (artifacts of wrong SMARTS match sites)
+    if mol.GetNumHeavyAtoms() < 2:
         return None
     return Chem.MolToSmiles(mol)
 

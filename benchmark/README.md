@@ -54,10 +54,20 @@ This will:
 ### 3. Run FragmentRetro benchmark
 
 ```bash
+# Serial (default)
 python benchmark/run_fragmentretro.py \
     --config ./benchmark_data/benchmark_config.json \
     --tiers 1 2 3 \
     --timeout 120
+
+# Parallel with 4 workers (each loads its own CompoundFilter)
+python benchmark/run_fragmentretro.py \
+    --config ./benchmark_data/benchmark_config.json \
+    --workers 4
+
+# Auto-detect CPU count
+python benchmark/run_fragmentretro.py \
+    --config ./benchmark_data/benchmark_config.json -j 0
 ```
 
 Options:
@@ -67,6 +77,7 @@ Options:
 - `--max-targets 20` — quick test on subset
 - `--max-depth 3` — Tier 3 retrosynthesis depth
 - `--max-nodes 500` — Tier 3 search budget
+- `--workers N` / `-j N` — parallel workers (0 = all CPUs, 1 = serial)
 
 ### 4. Run AiZynthFinder benchmark
 

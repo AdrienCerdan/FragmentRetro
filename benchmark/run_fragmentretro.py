@@ -7,10 +7,19 @@ Runs the full target set through:
   - Tier 3:  Standalone SMARTS retrosynthesis
 
 Usage:
+    # Serial (default)
     python run_fragmentretro.py \
         --config ./benchmark_data/benchmark_config.json \
-        --tiers 1 2 3 \
-        --timeout 120
+        --tiers 1 2 3 --timeout 120
+
+    # Parallel with 4 workers
+    python run_fragmentretro.py \
+        --config ./benchmark_data/benchmark_config.json \
+        --workers 4
+
+    # Auto-detect CPU count
+    python run_fragmentretro.py \
+        --config ./benchmark_data/benchmark_config.json -j 0
 
     # Quick test
     python run_fragmentretro.py \
@@ -39,6 +48,30 @@ from fragmentretro.scoring import (
 )
 from fragmentretro.reaction_library import ReactionLibrary
 from fragmentretro.utils.logging_config import logger
+
+
+# Module-level globals for multiprocessing workers.
+# Initialized once per worker via _init_worker() to avoid
+# re-serializing the (large) CompoundFilter/ReactionLibrary
+# for every task.
+_worker_cf = None
+_worker_lib = None
+_worker_tiers = None
+_worker_timeout = None
+_worker_max_depth = None
+_worker_max_nodes = None
+
+
+def _init_worker(mol_props_path, fp_size, tiers, timeout, max_depth, max_nodes):
+    """Initialize per-worker globals (called once per pool process)."""
+    global _worker_cf, _worker_lib, _worker_tiers
+    global _worker_timeout, _worker_max_depth, _worker_max_nodes
+    _worker_cf = load_compound_filter(mol_props_path, fpSize=fp_size)
+    _worker_lib = ReactionLibrary.default() if any(t in tiers for t in ["2", "3"]) else None
+    _worker_tiers = tiers
+    _worker_timeout = timeout
+    _worker_max_depth = max_depth
+    _worker_max_nodes = max_nodes
 
 
 # ---------------------------------------------------------------------------
@@ -163,14 +196,72 @@ def run_tier3(smiles, cf, lib, timeout, max_depth=3, max_nodes=500):
 
 
 # ---------------------------------------------------------------------------
+# Parallel worker
+# ---------------------------------------------------------------------------
+
+def _process_molecule(task):
+    """Process a single molecule (used by both serial and parallel modes).
+
+    Args:
+        task: tuple of (idx, smiles, n_total) for progress display.
+
+    Returns:
+        dict with per-molecule results.
+    """
+    idx, smiles, n_total = task
+    cf = _worker_cf
+    lib = _worker_lib
+    tiers = _worker_tiers
+    timeout = _worker_timeout
+    max_depth = _worker_max_depth
+    max_nodes = _worker_max_nodes
+
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        return {"idx": idx, "smiles": smiles, "valid": False, "tiers": {}}
+
+    canonical = Chem.MolToSmiles(mol)
+    mol_result = {
+        "idx": idx,
+        "smiles": canonical,
+        "original_smiles": smiles,
+        "valid": True,
+        "num_heavy_atoms": mol.GetNumHeavyAtoms(),
+        "num_rings": rdMolDescriptors.CalcNumRings(mol),
+        "tiers": {},
+    }
+
+    if "1" in tiers or "1b" in tiers:
+        mol_result["tiers"]["1_binary"] = run_tier1_binary(canonical, cf, timeout)
+    if "1" in tiers or "1c" in tiers:
+        mol_result["tiers"]["1_continuous"] = run_tier1_continuous(canonical, cf, timeout)
+    if "1" in tiers or "1d" in tiers:
+        mol_result["tiers"]["1_dag"] = run_tier1_dag(canonical, cf, timeout)
+    if "2" in tiers:
+        mol_result["tiers"]["2_validated"] = run_tier2(canonical, cf, lib, timeout)
+    if "3" in tiers:
+        mol_result["tiers"]["3_smarts"] = run_tier3(canonical, cf, lib, timeout,
+                                                     max_depth, max_nodes)
+
+    return mol_result
+
+
+# ---------------------------------------------------------------------------
 # Benchmark loop
 # ---------------------------------------------------------------------------
 
 def run_benchmark(targets, config, tiers, timeout=120.0,
-                  max_depth=3, max_nodes=500):
+                  max_depth=3, max_nodes=500, n_workers=1):
     mol_props_path = config["fragmentretro_stock"]
+    fp_size = config.get("fp_size", 2048)
+
+    if n_workers > 1:
+        return _run_benchmark_parallel(targets, config, tiers, timeout,
+                                        max_depth, max_nodes, n_workers)
+
+    # --- Serial mode ---
     print(f"Loading CompoundFilter from {mol_props_path} ...")
-    cf = load_compound_filter(mol_props_path)
+    cf = load_compound_filter(mol_props_path, fpSize=fp_size)
     print(f"  {cf.len_BBs} building blocks loaded")
 
     lib = None
@@ -179,61 +270,93 @@ def run_benchmark(targets, config, tiers, timeout=120.0,
         lib = ReactionLibrary.default()
         print(f"  {len(lib)} reactions loaded")
 
+    # Set globals for _process_molecule
+    global _worker_cf, _worker_lib, _worker_tiers
+    global _worker_timeout, _worker_max_depth, _worker_max_nodes
+    _worker_cf = cf
+    _worker_lib = lib
+    _worker_tiers = tiers
+    _worker_timeout = timeout
+    _worker_max_depth = max_depth
+    _worker_max_nodes = max_nodes
+
     results = []
     n_total = len(targets)
 
     for idx, smiles in enumerate(targets):
-        mol = Chem.MolFromSmiles(smiles)
-        if mol is None:
+        mol_result = _process_molecule((idx, smiles, n_total))
+
+        if not mol_result["valid"]:
             print(f"  [{idx+1}/{n_total}] SKIP (invalid): {smiles[:60]}")
-            results.append({"idx": idx, "smiles": smiles, "valid": False, "tiers": {}})
-            continue
-
-        canonical = Chem.MolToSmiles(mol)
-        mol_result = {
-            "idx": idx,
-            "smiles": canonical,
-            "original_smiles": smiles,
-            "valid": True,
-            "num_heavy_atoms": mol.GetNumHeavyAtoms(),
-            "num_rings": rdMolDescriptors.CalcNumRings(mol),
-            "tiers": {},
-        }
-
-        tier_labels = []
-
-        if "1" in tiers or "1b" in tiers:
-            r = run_tier1_binary(canonical, cf, timeout)
-            mol_result["tiers"]["1_binary"] = r
-            tier_labels.append(f"T1b={'Y' if r['solved'] else 'N'}")
-
-        if "1" in tiers or "1c" in tiers:
-            r = run_tier1_continuous(canonical, cf, timeout)
-            mol_result["tiers"]["1_continuous"] = r
-            tier_labels.append(f"T1c={r['score']:.3f}")
-
-        if "1" in tiers or "1d" in tiers:
-            r = run_tier1_dag(canonical, cf, timeout)
-            mol_result["tiers"]["1_dag"] = r
-            tier_labels.append(f"T1d={r['score']:.3f}")
-
-        if "2" in tiers:
-            r = run_tier2(canonical, cf, lib, timeout)
-            mol_result["tiers"]["2_validated"] = r
-            tier_labels.append(f"T2={r['score']:.3f}")
-
-        if "3" in tiers:
-            r = run_tier3(canonical, cf, lib, timeout, max_depth, max_nodes)
-            mol_result["tiers"]["3_smarts"] = r
-            tier_labels.append(f"T3={r['score']:.3f}")
-
-        total_time = sum(t.get("time_s", 0) for t in mol_result["tiers"].values())
-        status = " | ".join(tier_labels)
-        print(f"  [{idx+1}/{n_total}] {canonical[:50]:50s}  {status}  ({total_time:.2f}s)")
+        else:
+            tier_labels = []
+            for tier_key in sorted(mol_result["tiers"]):
+                t = mol_result["tiers"][tier_key]
+                if tier_key == "1_binary":
+                    tier_labels.append(f"T1b={'Y' if t['solved'] else 'N'}")
+                else:
+                    tier_labels.append(f"{_tier_label(tier_key)}={t['score']:.3f}")
+            total_time = sum(t.get("time_s", 0) for t in mol_result["tiers"].values())
+            status = " | ".join(tier_labels)
+            canonical = mol_result["smiles"]
+            print(f"  [{idx+1}/{n_total}] {canonical[:50]:50s}  {status}  ({total_time:.2f}s)")
 
         results.append(mol_result)
 
     return results
+
+
+def _run_benchmark_parallel(targets, config, tiers, timeout,
+                            max_depth, max_nodes, n_workers):
+    """Run benchmark using multiprocessing pool."""
+    import multiprocessing as mp
+
+    mol_props_path = config["fragmentretro_stock"]
+    fp_size = config.get("fp_size", 2048)
+
+    print(f"Parallel mode: {n_workers} workers")
+    print(f"Loading CompoundFilter + ReactionLibrary in each worker ...")
+
+    n_total = len(targets)
+    tasks = [(idx, smi, n_total) for idx, smi in enumerate(targets)]
+
+    with mp.Pool(
+        processes=n_workers,
+        initializer=_init_worker,
+        initargs=(mol_props_path, fp_size, tiers, timeout, max_depth, max_nodes),
+    ) as pool:
+        results_unordered = []
+        for mol_result in pool.imap_unordered(_process_molecule, tasks, chunksize=4):
+            idx = mol_result["idx"]
+            results_unordered.append(mol_result)
+            done = len(results_unordered)
+
+            if not mol_result["valid"]:
+                print(f"  [{done}/{n_total}] SKIP (invalid): {mol_result['smiles'][:60]}")
+            else:
+                tier_labels = []
+                for tier_key in sorted(mol_result["tiers"]):
+                    t = mol_result["tiers"][tier_key]
+                    if tier_key == "1_binary":
+                        tier_labels.append(f"T1b={'Y' if t['solved'] else 'N'}")
+                    else:
+                        tier_labels.append(f"{_tier_label(tier_key)}={t['score']:.3f}")
+                total_time = sum(t.get("time_s", 0) for t in mol_result["tiers"].values())
+                status = " | ".join(tier_labels)
+                canonical = mol_result["smiles"]
+                print(f"  [{done}/{n_total}] {canonical[:50]:50s}  {status}  ({total_time:.2f}s)")
+
+    # Re-sort by original index
+    results_unordered.sort(key=lambda r: r["idx"])
+    return results_unordered
+
+
+def _tier_label(tier_key):
+    """Short label for progress display."""
+    return {
+        "1_binary": "T1b", "1_continuous": "T1c", "1_dag": "T1d",
+        "2_validated": "T2", "3_smarts": "T3",
+    }.get(tier_key, tier_key)
 
 
 def compute_summary(results):
@@ -312,6 +435,10 @@ def main():
                         help="Tier 3 max tree depth")
     parser.add_argument("--max-nodes", type=int, default=500,
                         help="Tier 3 max nodes to explore")
+    parser.add_argument("--workers", "-j", type=int, default=1,
+                        help="Number of parallel workers (default: 1 = serial). "
+                             "Each worker loads its own CompoundFilter and "
+                             "ReactionLibrary. Use -j 0 for auto (all CPUs).")
     args = parser.parse_args()
 
     with open(args.config) as f:
@@ -327,18 +454,27 @@ def main():
     if args.max_targets:
         targets = targets[:args.max_targets]
 
+    n_workers = args.workers
+    if n_workers == 0:
+        import os
+        n_workers = os.cpu_count() or 1
+    if n_workers < 0:
+        n_workers = 1
+
     print(f"FragmentRetro Benchmark")
     print(f"  Targets:    {len(targets)}")
     print(f"  Stock BBs:  {config['n_stock_bbs']}")
     print(f"  Tiers:      {args.tiers}")
     print(f"  Timeout:    {args.timeout}s/mol")
+    print(f"  Workers:    {n_workers}" + (" (parallel)" if n_workers > 1 else " (serial)"))
     print()
 
     t_start = time.time()
     results = run_benchmark(targets, config, args.tiers,
                             timeout=args.timeout,
                             max_depth=args.max_depth,
-                            max_nodes=args.max_nodes)
+                            max_nodes=args.max_nodes,
+                            n_workers=n_workers)
     total_time = time.time() - t_start
 
     summary = compute_summary(results)
