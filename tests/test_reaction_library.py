@@ -261,7 +261,7 @@ class TestReactionSmarts:
 
     def test_explore_reactions_parse(self, explore_lib):
         parsed = sum(1 for r in explore_lib.reactions if r.rdkit_rxn() is not None)
-        assert parsed >= 25
+        assert parsed >= 30  # all 33 should parse after rxn208 SMARTS fix
 
     def test_find_matching_reactions(self, default_lib):
         """Biphenyl should match Suzuki and possibly decarboxylative coupling."""
@@ -382,6 +382,27 @@ class TestConstraints:
         for rxn in filtered.reactions:
             assert rxn.reaction_class == "coupling"
             assert rxn.reliability >= 0.85
+
+    def test_blocked_classes_removes_all(self, default_lib):
+        """Regression: blocking all classes must return empty library."""
+        all_classes = default_lib.reaction_classes
+        cfg = ConstraintConfig(blocked_classes=all_classes)
+        filtered = cfg.get_filtered_library(default_lib)
+        assert len(filtered) == 0
+
+    def test_blocked_classes_removes_specific(self, default_lib):
+        """Blocking one class must not leak any reactions of that class."""
+        cfg = ConstraintConfig(blocked_classes=["coupling"])
+        filtered = cfg.get_filtered_library(default_lib)
+        assert len(filtered) < len(default_lib)
+        for rxn in filtered.reactions:
+            assert rxn.reaction_class != "coupling"
+
+    def test_blocked_classes_nonexistent_keeps_all(self, default_lib):
+        """Blocking a class that doesn't exist must keep everything."""
+        cfg = ConstraintConfig(blocked_classes=["nonexistent_class"])
+        filtered = cfg.get_filtered_library(default_lib)
+        assert len(filtered) == len(default_lib)
 
 
 # ============================================================================

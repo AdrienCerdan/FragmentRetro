@@ -60,6 +60,60 @@ def find_model_files(args):
     return model_path, template_path
 
 
+def _get_route_reactions(route):
+    """Get reactions from a route, handling API differences across versions."""
+    # v4.x
+    for attr in ("reactions", "reaction_tree"):
+        obj = getattr(route, attr, None)
+        if obj is None:
+            continue
+        if callable(obj):
+            try:
+                return list(obj())
+            except TypeError:
+                return list(obj)
+        # v3.x: reactions is a property returning an iterable
+        try:
+            return list(obj)
+        except TypeError:
+            pass
+        # v4.x: reaction_tree has a .reactions method
+        if hasattr(obj, "reactions"):
+            try:
+                return list(obj.reactions)
+            except TypeError:
+                return list(obj.reactions())
+    return []
+
+
+def _get_route_leaves(route):
+    """Get leaf molecules from a route, handling API differences."""
+    for attr in ("leaves", "leafs"):
+        obj = getattr(route, attr, None)
+        if obj is None:
+            continue
+        if callable(obj):
+            try:
+                return list(obj())
+            except TypeError:
+                return list(obj)
+        try:
+            return list(obj)
+        except TypeError:
+            pass
+    # v4.x fallback: reaction_tree.leafs
+    rt = getattr(route, "reaction_tree", None)
+    if rt:
+        for attr in ("leafs", "leaves"):
+            obj = getattr(rt, attr, None)
+            if obj is not None:
+                try:
+                    return list(obj) if not callable(obj) else list(obj())
+                except TypeError:
+                    pass
+    return []
+
+
 def run_single(finder, smiles, time_limit):
     """Run AiZynthFinder on a single molecule."""
     t0 = time.time()
@@ -72,26 +126,40 @@ def run_single(finder, smiles, time_limit):
         finder.build_routes()
         search_time = time.time() - t0
 
-        stats = finder.routes.compute_scores(*finder.scorers.objects())
         n_routes = len(finder.routes)
         solved = False
         best_route = None
 
         if n_routes > 0:
+            # Compute scores — API varies across versions
+            try:
+                scorer_list = list(finder.scorers.values())
+                finder.routes.compute_scores(*scorer_list)
+            except Exception:
+                try:
+                    finder.routes.compute_scores()
+                except Exception:
+                    pass  # Scores are optional
+
             routes_list = list(finder.routes)
             solved = any(r.is_solved for r in routes_list)
 
             solved_routes = [r for r in routes_list if r.is_solved]
             top = solved_routes[0] if solved_routes else routes_list[0]
 
+            reactions = _get_route_reactions(top)
+            leaves = _get_route_leaves(top)
+
             best_route = {
                 "solved": top.is_solved,
-                "n_steps": len(list(top.reactions)),
-                "n_bbs": len(list(top.leaves)),
+                "n_steps": len(reactions),
+                "n_bbs": len(leaves),
             }
 
+            # Extract scores if available
             try:
-                route_scores = stats.get(top, {})
+                top_idx = routes_list.index(top)
+                route_scores = finder.routes.all_scores[top_idx]
                 if isinstance(route_scores, dict):
                     best_route["scores"] = {
                         k: round(float(v), 4) for k, v in route_scores.items()

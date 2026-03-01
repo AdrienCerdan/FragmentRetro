@@ -137,7 +137,7 @@
       "name": "SNAr_ortho_amine",
       "class": "substitution",
       "product_class": "aryl_amine",
-      "smarts_forward": "[#9,#17;A;D1][c:1]1[c;D2:6][c:5][c:4][c:3][c:2]1-[N$(N(=O)O),S$(S(=O)O),C$(C(=O)O),C$(C#N):7].[#7;A;$(N[#6])!$(N=*)!$([N-])!$(N#*)!$([ND3])!$([ND4])!$(N[O,N])!$(N[C,S]=[S,O,N]):8]>>[#7:8]-[c:1]1[c:6][c:5][c:4][c:3][c:2][*:7]",
+      "smarts_forward": "[#9,#17;A;D1][c:1]1[c;D2:6][c:5][c:4][c:3][c:2]1-[N$(N(=O)O),S$(S(=O)O),C$(C(=O)O),C$(C#N):7].[#7;A;$(N[#6])!$(N=*)!$([N-])!$(N#*)!$([ND3])!$([ND4])!$(N[O,N])!$(N[C,S]=[S,O,N]):8]>>[#7:8][c:1]1[c:6][c:5][c:4][c:3][c:2]1[*:7]",
       "num_reactants": 2,
       "reliability": 0.85,
       "notes": "Solvent-controlled regioselectivity (SNAr). X = COOH, NO2, SO2H"

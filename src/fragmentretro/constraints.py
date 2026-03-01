@@ -66,11 +66,12 @@ class ConstraintConfig:
         if self.allowed_classes:
             filtered = filtered.filter(classes=self.allowed_classes)
         if self.blocked_classes:
-            # Remove blocked classes by filtering to non-blocked
-            all_classes = filtered.reaction_classes
-            keep = [c for c in all_classes if c not in self.blocked_classes]
-            if keep:
-                filtered = filtered.filter(classes=keep)
+            # Remove blocked classes by keeping only non-blocked
+            keep_rxns = [
+                r for r in filtered.reactions
+                if r.reaction_class not in self.blocked_classes
+            ]
+            filtered = ReactionLibrary(keep_rxns)
 
         # Apply name filters
         if self.allowed_reactions:
