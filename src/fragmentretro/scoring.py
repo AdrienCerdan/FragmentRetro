@@ -588,8 +588,8 @@ def compute_score_smarts(
     # Or config object
     constraints: ConstraintConfig | None = None,
     # Search params
-    max_depth: int = 3,
-    max_nodes: int = 500,
+    max_depth: int = 5,
+    max_nodes: int = 2000,
     max_routes: int = 5,
 ) -> float:
     """Tier 3: Standalone SMARTS-based retrosynthesis scoring.

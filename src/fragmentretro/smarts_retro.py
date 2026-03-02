@@ -133,20 +133,21 @@ class SmartsRetrosynthesis:
     """Standalone retrosynthesis engine using SMARTS reaction patterns.
 
     Builds retrosynthesis trees by recursively applying reactions in reverse.
-    Stops when all leaves are building blocks or search limits are reached.
+    Uses best-first expansion (highest reliability first) with global
+    deduplication and early termination on solved routes.
 
     Args:
         library: ReactionLibrary to use for disconnections.
-        max_depth: Maximum tree depth (default: 3).
-        max_nodes: Maximum total nodes explored (default: 500).
+        max_depth: Maximum tree depth (default: 5).
+        max_nodes: Maximum total nodes explored (default: 2000).
         constraints: Optional ConstraintConfig for filtering.
     """
 
     def __init__(
         self,
         library: ReactionLibrary,
-        max_depth: int = 3,
-        max_nodes: int = 500,
+        max_depth: int = 5,
+        max_nodes: int = 2000,
         constraints: ConstraintConfig | None = None,
     ):
         self.library = library
@@ -158,6 +159,13 @@ class SmartsRetrosynthesis:
         # Apply constraints to library if provided
         if constraints:
             self.library = constraints.get_filtered_library(library)
+
+        # Pre-sort reactions by reliability (descending) for best-first search
+        self._sorted_reactions = sorted(
+            self.library.reactions,
+            key=lambda r: r.reliability,
+            reverse=True,
+        )
 
     def retrosynthesise(
         self,
@@ -177,6 +185,10 @@ class SmartsRetrosynthesis:
             List of RetroSynthNode trees, sorted by (solved, reliability).
         """
         self._nodes_explored = 0
+        # Cache is_purchasable to avoid redundant BB checks
+        self._purchasable_cache: dict[str, bool] = {}
+        # Track globally expanded (smiles, depth) to avoid re-expansion
+        self._expanded: set[str] = set()
 
         mol = Chem.MolFromSmiles(target_smiles)
         if mol is None:
@@ -186,20 +198,39 @@ class SmartsRetrosynthesis:
         canonical = Chem.MolToSmiles(mol)
 
         # Check if target is itself a BB
-        if is_purchasable and is_purchasable(canonical):
+        if is_purchasable and self._check_purchasable(canonical, is_purchasable):
             return [RetroSynthNode(smiles=canonical, is_building_block=True)]
 
-        routes = self._expand(
-            canonical,
-            depth=0,
-            is_purchasable=is_purchasable,
-            visited=frozenset(),
-        )
+        # Suppress RDKit warnings during search (reverse SMARTS produce
+        # many expected valence / aromatic warnings that slow down via I/O)
+        from rdkit import rdBase
+        rdBase.DisableLog('rdApp.*')
+
+        try:
+            routes = self._expand(
+                canonical,
+                depth=0,
+                is_purchasable=is_purchasable,
+                visited=frozenset(),
+            )
+        finally:
+            rdBase.EnableLog('rdApp.*')
 
         # Sort: solved first, then by avg_reliability descending
         routes.sort(key=lambda r: (r.is_solved, r.avg_reliability), reverse=True)
 
         return routes[:max_routes]
+
+    def _check_purchasable(
+        self, smiles: str, is_purchasable: Callable[[str], bool]
+    ) -> bool:
+        """Cached purchasability check."""
+        if smiles not in self._purchasable_cache:
+            try:
+                self._purchasable_cache[smiles] = is_purchasable(smiles)
+            except Exception:
+                self._purchasable_cache[smiles] = False
+        return self._purchasable_cache[smiles]
 
     def _expand(
         self,
@@ -215,20 +246,51 @@ class SmartsRetrosynthesis:
             return [RetroSynthNode(smiles=smiles, depth=depth)]
 
         if depth >= self.max_depth:
-            is_bb = is_purchasable(smiles) if is_purchasable else False
+            is_bb = (
+                self._check_purchasable(smiles, is_purchasable)
+                if is_purchasable
+                else False
+            )
             return [RetroSynthNode(smiles=smiles, depth=depth, is_building_block=is_bb)]
 
         if smiles in visited:
             # Cycle detection
             return [RetroSynthNode(smiles=smiles, depth=depth)]
 
+        # Global deduplication: skip if already expanded at same or shallower depth
+        dedup_key = smiles
+        if dedup_key in self._expanded:
+            is_bb = (
+                self._check_purchasable(smiles, is_purchasable)
+                if is_purchasable
+                else False
+            )
+            return [RetroSynthNode(smiles=smiles, depth=depth, is_building_block=is_bb)]
+        self._expanded.add(dedup_key)
+
         new_visited = visited | {smiles}
 
-        # Find all applicable reactions
-        routes: list[RetroSynthNode] = []
+        # Pre-filter: only attempt reactions whose product SMARTS matches
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            return [RetroSynthNode(smiles=smiles, depth=depth)]
 
-        for rxn in self.library.reactions:
+        routes: list[RetroSynthNode] = []
+        found_solved = False
+
+        for rxn in self._sorted_reactions:
+            if self._nodes_explored > self.max_nodes:
+                break
+
+            # Early termination: once we have a solved route, skip lower-reliability reactions
+            if found_solved:
+                break
+
             if self.constraints and not self.constraints.is_reaction_allowed(rxn):
+                continue
+
+            # Cheap substructure pre-filter before expensive reverse application
+            if not rxn.matches_product(mol):
                 continue
 
             reactant_sets = rxn.apply_reverse(smiles)
@@ -256,7 +318,14 @@ class SmartsRetrosynthesis:
                         break
                     r_canonical = Chem.MolToSmiles(r_mol)
 
-                    if is_purchasable and is_purchasable(r_canonical):
+                    # Skip fragments same as or larger than parent (spurious match)
+                    if r_mol.GetNumHeavyAtoms() >= mol.GetNumHeavyAtoms():
+                        valid = False
+                        break
+
+                    if is_purchasable and self._check_purchasable(
+                        r_canonical, is_purchasable
+                    ):
                         child_options.append([
                             RetroSynthNode(
                                 smiles=r_canonical,
@@ -297,8 +366,16 @@ class SmartsRetrosynthesis:
 
                 routes.append(node)
 
+                if node.is_solved:
+                    found_solved = True
+                    break
+
         if not routes:
-            is_bb = is_purchasable(smiles) if is_purchasable else False
+            is_bb = (
+                self._check_purchasable(smiles, is_purchasable)
+                if is_purchasable
+                else False
+            )
             return [RetroSynthNode(smiles=smiles, depth=depth, is_building_block=is_bb)]
 
         return routes

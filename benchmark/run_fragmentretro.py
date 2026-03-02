@@ -40,7 +40,6 @@ from rdkit.Chem import rdMolDescriptors
 
 from fragmentretro.scoring import (
     compute_all_brics_tiers,
-    compute_score_smarts,
     load_compound_filter,
 )
 from fragmentretro.reaction_library import ReactionLibrary
@@ -76,36 +75,50 @@ def _init_worker(mol_props_path, fp_size, tiers, timeout, max_depth, max_nodes):
 # ---------------------------------------------------------------------------
 
 
-def run_tier3(smiles, cf, lib, timeout, max_depth=3, max_nodes=500):
+def run_tier3(smiles, cf, lib, timeout, max_depth=5, max_nodes=2000):
     t0 = time.time()
     try:
-        score = compute_score_smarts(smiles, cf, lib,
-                                     max_depth=max_depth, max_nodes=max_nodes)
+        from fragmentretro.smarts_retro import SmartsRetrosynthesis
+
+        retro = SmartsRetrosynthesis(lib, max_depth=max_depth, max_nodes=max_nodes)
+
+        def is_purchasable(smi):
+            try:
+                return cf.has_match(smi)
+            except Exception:
+                return False
+
+        routes = retro.retrosynthesise(smiles, is_purchasable=is_purchasable,
+                                        max_routes=5)
 
         routes_info = []
-        if score > 0:
-            from fragmentretro.smarts_retro import SmartsRetrosynthesis
-            retro = SmartsRetrosynthesis(lib, max_depth=max_depth, max_nodes=max_nodes)
-
-            def is_purchasable(smi):
-                try:
-                    return cf.has_match(smi)
-                except Exception:
-                    return False
-
-            routes = retro.retrosynthesise(smiles, is_purchasable=is_purchasable,
-                                           max_routes=3)
-            for r in routes:
-                routes_info.append({
-                    "solved": r.is_solved,
-                    "steps": r.num_steps,
-                    "lls": r.longest_linear_sequence,
-                    "n_bbs": r.num_leaves,
-                    "avg_reliability": round(r.avg_reliability, 4),
-                    "reaction": r.reaction.name if r.reaction else None,
-                })
+        for r in routes:
+            routes_info.append({
+                "solved": r.is_solved,
+                "steps": r.num_steps,
+                "lls": r.longest_linear_sequence,
+                "n_bbs": r.num_leaves,
+                "avg_reliability": round(r.avg_reliability, 4),
+                "reaction": r.reaction.name if r.reaction else None,
+            })
 
         best_route_solved = (routes_info[0]["solved"] if routes_info else False)
+
+        # Derive score from best route (same logic as compute_score_smarts)
+        if routes:
+            best = max(routes, key=lambda r: (r.is_solved, r.avg_reliability))
+            if best.is_solved:
+                reliability_score = best.avg_reliability
+                steps = best.num_steps
+                efficiency_score = 1.0 / (1.0 + 0.2 * steps)
+                score = 0.5 * reliability_score + 0.5 * efficiency_score
+            else:
+                total_leaves = best.num_leaves
+                bb_leaves = sum(1 for n in _iter_leaves_t3(best) if n.is_building_block)
+                partial = bb_leaves / total_leaves if total_leaves > 0 else 0.0
+                score = 0.3 * partial * best.avg_reliability
+        else:
+            score = 0.0
 
         return {
             "tier": "3_smarts", "solved": best_route_solved,
@@ -118,6 +131,15 @@ def run_tier3(smiles, cf, lib, timeout, max_depth=3, max_nodes=500):
         return {"tier": "3_smarts", "solved": False, "score": 0.0,
                 "n_routes": 0, "best_route": None,
                 "time_s": round(time.time() - t0, 4), "error": str(e)}
+
+
+def _iter_leaves_t3(node):
+    """Iterate leaf nodes of a RetroSynthNode tree."""
+    if node.is_leaf:
+        yield node
+    else:
+        for c in node.children:
+            yield from _iter_leaves_t3(c)
 
 
 # ---------------------------------------------------------------------------
@@ -219,7 +241,7 @@ def _process_molecule(task):
                 vr = brics_result.validated_result
                 mol_result["tiers"]["2_validated"] = {
                     "tier": "2_validated",
-                    "solved": vr.feasible,
+                    "solved": vr.feasible and vr.validation_coverage >= 1.0,
                     "score": round(vr.score, 6),
                     "total_steps": vr.total_steps,
                     "lls": vr.longest_linear_sequence,
@@ -258,7 +280,7 @@ def _process_molecule(task):
 # ---------------------------------------------------------------------------
 
 def run_benchmark(targets, config, tiers, timeout=120.0,
-                  max_depth=3, max_nodes=500, n_workers=1):
+                  max_depth=5, max_nodes=2000, n_workers=1):
     mol_props_path = config["fragmentretro_stock"]
     fp_size = config.get("fp_size", 2048)
 
@@ -438,9 +460,9 @@ def main():
                         help="Timeout per molecule (seconds)")
     parser.add_argument("--max-targets", type=int, default=None,
                         help="Limit to first N targets")
-    parser.add_argument("--max-depth", type=int, default=3,
+    parser.add_argument("--max-depth", type=int, default=5,
                         help="Tier 3 max tree depth")
-    parser.add_argument("--max-nodes", type=int, default=500,
+    parser.add_argument("--max-nodes", type=int, default=2000,
                         help="Tier 3 max nodes to explore")
     parser.add_argument("--workers", "-j", type=int, default=1,
                         help="Number of parallel workers (default: 1 = serial). "
