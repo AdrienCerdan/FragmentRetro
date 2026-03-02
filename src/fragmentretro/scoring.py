@@ -688,3 +688,266 @@ def _iter_leaves(node: object):
     else:
         for c in n.children:
             yield from _iter_leaves(c)
+
+
+# ---------------------------------------------------------------------------
+# Unified BRICS tier computation (single _run_retro call)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class AllBricsTiersResult:
+    """Results from a single _run_retro call used to derive all BRICS tiers.
+
+    Attributes:
+        binary: T1 binary result (solved / not solved).
+        continuous_score: T1 continuous score in [0, 1].
+        dag_result: T1 DAG result (DAGScoreResult).
+        validated_result: T2 validated result (DAGScoreResult), None if not requested.
+    """
+
+    binary: bool
+    continuous_score: float
+    dag_result: DAGScoreResult
+    validated_result: DAGScoreResult | None = None
+
+
+def compute_all_brics_tiers(
+    smiles: str,
+    compound_filter: CompoundFilter,
+    reaction_library: ReactionLibrary | None = None,
+    *,
+    # Which tiers to compute
+    include_binary: bool = True,
+    include_continuous: bool = True,
+    include_dag: bool = True,
+    include_validated: bool = False,
+    # Shared retro params
+    use_rbrics: bool = True,
+    solution_cap: int = 5,
+    # Continuous scoring weights
+    cont_step_weight: float = 0.35,
+    cont_availability_weight: float = 0.30,
+    cont_feasibility_weight: float = 0.35,
+    # DAG scoring weights
+    dag_step_weight: float = 0.25,
+    dag_availability_weight: float = 0.20,
+    dag_feasibility_weight: float = 0.25,
+    dag_convergence_weight: float = 0.15,
+    dag_lls_weight: float = 0.15,
+    # Validated scoring weights
+    val_step_weight: float = 0.20,
+    val_availability_weight: float = 0.15,
+    val_feasibility_weight: float = 0.25,
+    val_convergence_weight: float = 0.10,
+    val_lls_weight: float = 0.10,
+    val_validation_weight: float = 0.20,
+    # Constraint params for validated tier
+    constraints: ConstraintConfig | None = None,
+    allowed_reactions: list[str] | None = None,
+    blocked_reactions: list[str] | None = None,
+    allowed_classes: list[str] | None = None,
+    max_steps: int | None = None,
+    max_lls: int | None = None,
+    min_reliability: float = 0.0,
+    require_all_validated: bool = False,
+) -> AllBricsTiersResult:
+    """Compute all BRICS-based tier scores from a single retrosynthesis run.
+
+    This avoids redundant calls to ``_run_retro`` when multiple tiers are
+    needed for the same molecule. The expensive BRICS fragmentation and
+    substructure matching against the BB catalog is performed **once**,
+    then each requested tier score is derived from the shared result.
+
+    Args:
+        smiles: Target molecule SMILES.
+        compound_filter: Pre-loaded CompoundFilter (shared singleton).
+        reaction_library: ReactionLibrary for T2 validation (optional).
+        include_binary .. include_validated: Which tiers to compute.
+        use_rbrics: Use r-BRICS (recommended) or BRICS.
+        solution_cap: Max solutions to enumerate.
+        cont_*/dag_*/val_*: Per-tier scoring weights.
+        constraints .. require_all_validated: Constraint params for T2.
+
+    Returns:
+        AllBricsTiersResult with all requested tier scores.
+    """
+    from fragmentretro.retro_dag import build_best_dag
+
+    # Determine binary_mode: only use binary if that's the ONLY tier requested
+    only_binary = include_binary and not (include_continuous or include_dag or include_validated)
+
+    # --- Single _run_retro call ---
+    try:
+        retro_tool, retro_solution = _run_retro(
+            smiles,
+            compound_filter,
+            binary_mode=only_binary,
+            use_rbrics=use_rbrics,
+            solution_cap=1 if only_binary else solution_cap,
+        )
+    except Exception as e:
+        logger.warning(f"[Scoring] Failed to score {smiles}: {e}")
+        return AllBricsTiersResult(
+            binary=False,
+            continuous_score=0.0,
+            dag_result=DAGScoreResult(score=0.0, feasible=False),
+            validated_result=DAGScoreResult(score=0.0, feasible=False) if include_validated else None,
+        )
+
+    has_solutions = len(retro_solution.solutions) > 0
+
+    # --- T1 binary ---
+    binary_result = has_solutions
+
+    if not has_solutions:
+        return AllBricsTiersResult(
+            binary=False,
+            continuous_score=0.0,
+            dag_result=DAGScoreResult(score=0.0, feasible=False),
+            validated_result=DAGScoreResult(score=0.0, feasible=False) if include_validated else None,
+        )
+
+    # --- Shared computation for continuous / DAG / validated ---
+    best_solution: SolutionType = min(retro_solution.solutions, key=len)
+    num_frags = len(best_solution)
+    max_frags = retro_tool.num_fragments
+
+    # Step score (shared)
+    step_score = 1.0 if max_frags <= 1 else 1.0 - (num_frags - 1) / (max_frags - 1)
+
+    # BB availability (shared)
+    bb_counts = []
+    for comb in best_solution:
+        bbs = retro_tool.comb_bbs_dict.get(comb, set())
+        bb_counts.append(len(bbs))
+    min_bb_count = min(bb_counts) if bb_counts else 0
+    availability_score = min(1.0, math.log1p(min_bb_count) / math.log1p(100))
+
+    # Bond feasibility (shared)
+    bond_types = retro_tool.fragmenter.get_bond_types_for_solution(best_solution)
+    bond_feasibility_score = get_solution_bond_feasibility(bond_types)
+
+    # --- T1 continuous ---
+    continuous_score = (
+        cont_step_weight * step_score
+        + cont_availability_weight * availability_score
+        + cont_feasibility_weight * bond_feasibility_score
+    )
+
+    # --- DAG construction (shared by T1_dag and T2_validated) ---
+    dag = None
+    convergence = 0.5
+    lls = num_frags - 1
+    total_steps = num_frags - 1
+    n_bbs = num_frags
+    lls_score = 0.5
+
+    if include_dag or include_validated:
+        try:
+            dag = build_best_dag(best_solution, retro_tool.fragmenter, retro_tool.comb_bbs_dict)
+            convergence = dag.convergence_score
+            lls = dag.longest_linear_sequence
+            total_steps = dag.num_steps
+            n_bbs = dag.num_leaves
+
+            if n_bbs <= 1:
+                lls_score = 1.0
+            else:
+                worst_lls = n_bbs - 1
+                lls_score = max(0.0, min(1.0, 1.0 - (lls - 1) / max(worst_lls - 1, 1)))
+        except Exception as e:
+            logger.warning(f"[Scoring] DAG construction failed for {smiles}: {e}")
+
+    # --- T1 DAG score ---
+    dag_total = (
+        dag_step_weight * step_score
+        + dag_availability_weight * availability_score
+        + dag_feasibility_weight * bond_feasibility_score
+        + dag_convergence_weight * convergence
+        + dag_lls_weight * lls_score
+    )
+
+    dag_result = DAGScoreResult(
+        score=dag_total,
+        feasible=True,
+        total_steps=total_steps,
+        longest_linear_sequence=lls,
+        num_building_blocks=n_bbs,
+        convergence_score=convergence,
+        step_score=step_score,
+        availability_score=availability_score,
+        bond_feasibility_score=bond_feasibility_score,
+        dag=dag,
+    )
+
+    # --- T2 validated score ---
+    validated_result: DAGScoreResult | None = None
+    if include_validated:
+        matched_reactions: list[tuple[str, float]] = []
+        validation_coverage = 0.0
+        constraints_satisfied = True
+
+        cfg = build_constraints(
+            constraints=constraints,
+            allowed_reactions=allowed_reactions,
+            blocked_reactions=blocked_reactions,
+            allowed_classes=allowed_classes,
+            max_steps=max_steps,
+            max_lls=max_lls,
+            min_reliability=min_reliability,
+            require_all_validated=require_all_validated,
+        )
+
+        active_lib = reaction_library
+        if cfg and reaction_library is not None:
+            active_lib = cfg.get_filtered_library(reaction_library)
+
+        if dag is not None and active_lib is not None:
+            matched_reactions, validation_coverage = _validate_dag_with_smarts(dag, active_lib)
+
+            if cfg:
+                constraints_satisfied = cfg.check_route_metrics(total_steps, lls)
+                if cfg.require_all_validated and validation_coverage < 1.0:
+                    constraints_satisfied = False
+
+        # Validation score
+        if matched_reactions:
+            avg_rel = sum(r for _, r in matched_reactions) / len(matched_reactions)
+            validation_score = validation_coverage * avg_rel
+        else:
+            validation_score = 0.0
+
+        constraint_multiplier = 1.0 if constraints_satisfied else 0.5
+
+        val_total = constraint_multiplier * (
+            val_step_weight * step_score
+            + val_availability_weight * availability_score
+            + val_feasibility_weight * bond_feasibility_score
+            + val_convergence_weight * convergence
+            + val_lls_weight * lls_score
+            + val_validation_weight * validation_score
+        )
+
+        validated_result = DAGScoreResult(
+            score=val_total,
+            feasible=True,
+            total_steps=total_steps,
+            longest_linear_sequence=lls,
+            num_building_blocks=n_bbs,
+            convergence_score=convergence,
+            step_score=step_score,
+            availability_score=availability_score,
+            bond_feasibility_score=bond_feasibility_score,
+            dag=dag,
+            matched_reactions=matched_reactions,
+            validation_coverage=validation_coverage,
+            constraints_satisfied=constraints_satisfied,
+        )
+
+    return AllBricsTiersResult(
+        binary=binary_result,
+        continuous_score=continuous_score,
+        dag_result=dag_result,
+        validated_result=validated_result,
+    )

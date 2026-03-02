@@ -179,13 +179,43 @@ class CompoundFilter:
         This is a convenience method for purchasability checking, used by
         the SMARTS retrosynthesis engine (Tier 3 scoring).
 
+        Uses an early-exit strategy: instead of computing all filtered indices
+        (O(n_BBs)), returns True as soon as a single match is found. This
+        significantly reduces cost for large BB catalogs.
+
         Args:
             smiles: Query SMILES string.
 
         Returns:
             True if at least one BB matches.
         """
-        return len(self.filter_compounds(smiles)) > 0
+        no_dummy_smiles = replace_dummy_atoms_regex(smiles)
+        try:
+            mol_properties = get_mol_properties(no_dummy_smiles, fpSize=self.fpSize)
+        except ValueError:
+            return False
+
+        num_heavy_atoms = mol_properties["num_heavy_atoms"]
+        num_rings = mol_properties["num_rings"]
+        pfp = mol_properties["pfp"]
+        pfp_len = len(pfp)
+
+        query_pfp_bit_array = np.zeros(self.fpSize, dtype=bool)
+        query_pfp_bit_array[pfp] = True
+
+        # Vectorized pre-filter (same as filter_compounds)
+        indices_array = np.where(
+            (self.num_heavy_atoms_array >= num_heavy_atoms)
+            & (self.num_rings_array >= num_rings)
+            & (self.pfp_len_array >= pfp_len)
+        )[0]
+
+        if indices_array.size == 0:
+            return False
+
+        # PFP subset check — only need to find ONE passing index
+        matches = np.all(self.pfp_bit_array[indices_array][:, query_pfp_bit_array], axis=1)
+        return bool(np.any(matches))
 
     def get_filtered_BBs(
         self, smiles: str, prefiltered_indices: FilterIndicesType | None = None

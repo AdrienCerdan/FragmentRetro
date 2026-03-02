@@ -39,11 +39,8 @@ from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
 
 from fragmentretro.scoring import (
-    compute_score,
-    compute_score_with_dag,
-    compute_score_validated,
+    compute_all_brics_tiers,
     compute_score_smarts,
-    is_feasible,
     load_compound_filter,
 )
 from fragmentretro.reaction_library import ReactionLibrary
@@ -75,80 +72,8 @@ def _init_worker(mol_props_path, fp_size, tiers, timeout, max_depth, max_nodes):
 
 
 # ---------------------------------------------------------------------------
-# Per-tier runners
+# Per-tier runners (only T3 remains standalone — it uses a different engine)
 # ---------------------------------------------------------------------------
-
-def run_tier1_binary(smiles, cf, timeout):
-    t0 = time.time()
-    try:
-        feasible = is_feasible(smiles, cf)
-        return {"tier": "1_binary", "solved": feasible,
-                "score": 1.0 if feasible else 0.0,
-                "time_s": round(time.time() - t0, 4)}
-    except Exception as e:
-        return {"tier": "1_binary", "solved": False, "score": 0.0,
-                "time_s": round(time.time() - t0, 4), "error": str(e)}
-
-
-def run_tier1_continuous(smiles, cf, timeout):
-    t0 = time.time()
-    try:
-        score = compute_score(smiles, cf)
-        return {"tier": "1_continuous", "solved": score > 0,
-                "score": round(score, 6),
-                "time_s": round(time.time() - t0, 4)}
-    except Exception as e:
-        return {"tier": "1_continuous", "solved": False, "score": 0.0,
-                "time_s": round(time.time() - t0, 4), "error": str(e)}
-
-
-def run_tier1_dag(smiles, cf, timeout):
-    t0 = time.time()
-    try:
-        r = compute_score_with_dag(smiles, cf)
-        return {
-            "tier": "1_dag", "solved": r.feasible,
-            "score": round(r.score, 6),
-            "total_steps": r.total_steps,
-            "lls": r.longest_linear_sequence,
-            "num_bbs": r.num_building_blocks,
-            "convergence": round(r.convergence_score, 4),
-            "step_score": round(r.step_score, 4),
-            "availability_score": round(r.availability_score, 4),
-            "bond_feasibility_score": round(r.bond_feasibility_score, 4),
-            "time_s": round(time.time() - t0, 4),
-        }
-    except Exception as e:
-        return {"tier": "1_dag", "solved": False, "score": 0.0,
-                "total_steps": 0, "lls": 0, "num_bbs": 0, "convergence": 0.0,
-                "time_s": round(time.time() - t0, 4), "error": str(e)}
-
-
-def run_tier2(smiles, cf, lib, timeout):
-    t0 = time.time()
-    try:
-        r = compute_score_validated(smiles, cf, lib)
-        return {
-            "tier": "2_validated", "solved": r.feasible,
-            "score": round(r.score, 6),
-            "total_steps": r.total_steps,
-            "lls": r.longest_linear_sequence,
-            "num_bbs": r.num_building_blocks,
-            "convergence": round(r.convergence_score, 4),
-            "validation_coverage": round(r.validation_coverage, 4),
-            "matched_reactions": [
-                {"name": name, "score": round(s, 4)}
-                for name, s in r.matched_reactions
-            ],
-            "n_matched": len(r.matched_reactions),
-            "constraints_satisfied": r.constraints_satisfied,
-            "time_s": round(time.time() - t0, 4),
-        }
-    except Exception as e:
-        return {"tier": "2_validated", "solved": False, "score": 0.0,
-                "total_steps": 0, "lls": 0, "num_bbs": 0,
-                "validation_coverage": 0.0, "n_matched": 0,
-                "time_s": round(time.time() - t0, 4), "error": str(e)}
 
 
 def run_tier3(smiles, cf, lib, timeout, max_depth=3, max_nodes=500):
@@ -202,6 +127,9 @@ def run_tier3(smiles, cf, lib, timeout, max_depth=3, max_nodes=500):
 def _process_molecule(task):
     """Process a single molecule (used by both serial and parallel modes).
 
+    Runs ``_run_retro`` **once** for all BRICS-based tiers (T1b/T1c/T1d/T2)
+    via ``compute_all_brics_tiers``, then runs T3 independently (different engine).
+
     Args:
         task: tuple of (idx, smiles, n_total) for progress display.
 
@@ -231,14 +159,93 @@ def _process_molecule(task):
         "tiers": {},
     }
 
-    if "1" in tiers or "1b" in tiers:
-        mol_result["tiers"]["1_binary"] = run_tier1_binary(canonical, cf, timeout)
-    if "1" in tiers or "1c" in tiers:
-        mol_result["tiers"]["1_continuous"] = run_tier1_continuous(canonical, cf, timeout)
-    if "1" in tiers or "1d" in tiers:
-        mol_result["tiers"]["1_dag"] = run_tier1_dag(canonical, cf, timeout)
-    if "2" in tiers:
-        mol_result["tiers"]["2_validated"] = run_tier2(canonical, cf, lib, timeout)
+    # --- BRICS tiers: single _run_retro call via compute_all_brics_tiers ---
+    need_binary = "1" in tiers or "1b" in tiers
+    need_continuous = "1" in tiers or "1c" in tiers
+    need_dag = "1" in tiers or "1d" in tiers
+    need_validated = "2" in tiers
+
+    if need_binary or need_continuous or need_dag or need_validated:
+        t0 = time.time()
+        try:
+            brics_result = compute_all_brics_tiers(
+                canonical,
+                cf,
+                reaction_library=lib,
+                include_binary=need_binary,
+                include_continuous=need_continuous,
+                include_dag=need_dag,
+                include_validated=need_validated,
+            )
+            brics_time = time.time() - t0
+
+            # Distribute the shared compute time proportionally across tiers
+            n_brics_tiers = sum([need_binary, need_continuous, need_dag, need_validated])
+            per_tier_time = round(brics_time / n_brics_tiers, 4) if n_brics_tiers else 0
+
+            if need_binary:
+                mol_result["tiers"]["1_binary"] = {
+                    "tier": "1_binary",
+                    "solved": brics_result.binary,
+                    "score": 1.0 if brics_result.binary else 0.0,
+                    "time_s": per_tier_time,
+                }
+
+            if need_continuous:
+                mol_result["tiers"]["1_continuous"] = {
+                    "tier": "1_continuous",
+                    "solved": brics_result.continuous_score > 0,
+                    "score": round(brics_result.continuous_score, 6),
+                    "time_s": per_tier_time,
+                }
+
+            if need_dag:
+                dr = brics_result.dag_result
+                mol_result["tiers"]["1_dag"] = {
+                    "tier": "1_dag",
+                    "solved": dr.feasible,
+                    "score": round(dr.score, 6),
+                    "total_steps": dr.total_steps,
+                    "lls": dr.longest_linear_sequence,
+                    "num_bbs": dr.num_building_blocks,
+                    "convergence": round(dr.convergence_score, 4),
+                    "step_score": round(dr.step_score, 4),
+                    "availability_score": round(dr.availability_score, 4),
+                    "bond_feasibility_score": round(dr.bond_feasibility_score, 4),
+                    "time_s": per_tier_time,
+                }
+
+            if need_validated and brics_result.validated_result is not None:
+                vr = brics_result.validated_result
+                mol_result["tiers"]["2_validated"] = {
+                    "tier": "2_validated",
+                    "solved": vr.feasible,
+                    "score": round(vr.score, 6),
+                    "total_steps": vr.total_steps,
+                    "lls": vr.longest_linear_sequence,
+                    "num_bbs": vr.num_building_blocks,
+                    "convergence": round(vr.convergence_score, 4),
+                    "validation_coverage": round(vr.validation_coverage, 4),
+                    "matched_reactions": [
+                        {"name": name, "score": round(s, 4)}
+                        for name, s in vr.matched_reactions
+                    ],
+                    "n_matched": len(vr.matched_reactions),
+                    "constraints_satisfied": vr.constraints_satisfied,
+                    "time_s": per_tier_time,
+                }
+
+        except Exception as e:
+            # Fallback: mark all requested BRICS tiers as failed
+            for tier_key, needed in [("1_binary", need_binary), ("1_continuous", need_continuous),
+                                     ("1_dag", need_dag), ("2_validated", need_validated)]:
+                if needed:
+                    mol_result["tiers"][tier_key] = {
+                        "tier": tier_key, "solved": False, "score": 0.0,
+                        "time_s": round(time.time() - t0, 4), "error": str(e),
+                    }
+
+    # --- T3: separate engine (SMARTS retrosynthesis) ---
     if "3" in tiers:
         mol_result["tiers"]["3_smarts"] = run_tier3(canonical, cf, lib, timeout,
                                                      max_depth, max_nodes)
