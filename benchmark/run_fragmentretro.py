@@ -35,15 +35,17 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from rdkit import Chem
-from rdkit.Chem import rdMolDescriptors
+from rdkit import Chem, DataStructs
+from rdkit.Chem import AllChem, rdMolDescriptors
 
 from fragmentretro.scoring import (
     compute_all_brics_tiers,
     load_compound_filter,
 )
 from fragmentretro.reaction_library import ReactionLibrary
-from fragmentretro.utils.logging_config import logger
+from fragmentretro.utils.logging_config import logger, setup_logging
+
+setup_logging()
 
 
 # Module-level globals for multiprocessing workers.
@@ -55,19 +57,179 @@ _worker_lib = None
 _worker_tiers = None
 _worker_timeout = None
 _worker_max_depth = None
+_worker_max_depth = None
 _worker_max_nodes = None
+_worker_reference_routes = None
+
+def extract_reference_leaves(node):
+    if node.get("type") == "mol" and node.get("in_stock", False):
+        return {node["smiles"]}
+    leaves = set()
+    for child in node.get("children", []):
+        leaves.update(extract_reference_leaves(child))
+    return leaves
+
+def load_reference_routes(path):
+    print(f"Loading reference routes from {path} ...")
+    with open(path, 'r') as f:
+        ref_data = json.load(f)
+    reference_routes = {}
+    for item in ref_data:
+        smiles = item["smiles"]
+        mol = Chem.MolFromSmiles(smiles)
+        if mol:
+            can_smiles = Chem.MolToSmiles(mol)
+            leaves = extract_reference_leaves(item)
+            can_leaves = set()
+            for l in leaves:
+                lmol = Chem.MolFromSmiles(l)
+                if lmol:
+                    can_leaves.add(Chem.MolToSmiles(lmol))
+                else:
+                    can_leaves.add(l)
+            reference_routes[can_smiles] = list(can_leaves)
+    return reference_routes
+
+def get_retro_node_leaves(node):
+    if node is None:
+        return set()
+    if getattr(node, "is_leaf", False):
+        bbs = getattr(node, "bb_smiles", None)
+        if bbs:
+            can_bbs = set()
+            for bb in bbs:
+                mol = Chem.MolFromSmiles(bb)
+                if mol:
+                    can_bbs.add(Chem.MolToSmiles(mol))
+                else:
+                    can_bbs.add(bb)
+            return can_bbs
+        # Fallback to fragment smiles
+        mol = Chem.MolFromSmiles(node.smiles)
+        if mol:
+            return {Chem.MolToSmiles(mol)}
+        return {node.smiles}
+    leaves = set()
+    for c in getattr(node, "children", []):
+        leaves.update(get_retro_node_leaves(c))
+    return leaves
+
+def _smiles_to_fp(smi, radius=2, nbits=2048):
+    """Convert SMILES to Morgan fingerprint, or None on failure."""
+    mol = Chem.MolFromSmiles(smi)
+    if mol is None:
+        return None
+    return AllChem.GetMorganFingerprintAsBitVect(mol, radius, nBits=nbits)
 
 
-def _init_worker(mol_props_path, fp_size, tiers, timeout, max_depth, max_nodes):
+def compute_route_similarity(ref_leaves, pred_leaves):
+    """Compute similarity metrics between reference and predicted BB sets.
+
+    Args:
+        ref_leaves: set of canonical SMILES (reference building blocks).
+        pred_leaves: set of canonical SMILES (predicted building blocks).
+
+    Returns:
+        dict with jaccard, recall, precision, max_tanimoto, n_ref, n_pred, n_common.
+    """
+    if not ref_leaves or not pred_leaves:
+        return {
+            "jaccard": 0.0, "recall": 0.0, "precision": 0.0,
+            "max_tanimoto": 0.0, "n_ref": len(ref_leaves) if ref_leaves else 0,
+            "n_pred": len(pred_leaves) if pred_leaves else 0, "n_common": 0,
+        }
+
+    common = ref_leaves & pred_leaves
+    union = ref_leaves | pred_leaves
+    jaccard = len(common) / len(union) if union else 0.0
+    recall = len(common) / len(ref_leaves)
+    precision = len(common) / len(pred_leaves)
+
+    # Tanimoto fingerprint similarity: for each predicted BB, find the max
+    # Tanimoto to any reference BB. Average over all predicted BBs.
+    ref_fps = [_smiles_to_fp(s) for s in ref_leaves]
+    ref_fps = [fp for fp in ref_fps if fp is not None]
+    pred_fps = [(s, _smiles_to_fp(s)) for s in pred_leaves]
+
+    tanimoto_scores = []
+    for smi, pfp in pred_fps:
+        if pfp is None or not ref_fps:
+            tanimoto_scores.append(0.0)
+            continue
+        max_sim = max(DataStructs.TanimotoSimilarity(pfp, rfp) for rfp in ref_fps)
+        tanimoto_scores.append(max_sim)
+    avg_max_tanimoto = sum(tanimoto_scores) / len(tanimoto_scores) if tanimoto_scores else 0.0
+
+    return {
+        "jaccard": round(jaccard, 4),
+        "recall": round(recall, 4),
+        "precision": round(precision, 4),
+        "max_tanimoto": round(avg_max_tanimoto, 4),
+        "n_ref": len(ref_leaves),
+        "n_pred": len(pred_leaves),
+        "n_common": len(common),
+    }
+
+
+def get_retro_node_reactions(node):
+    """Extract the list of reactions (disconnections) from a RetroNode DAG.
+
+    Returns:
+        list of dicts with reaction name, bond_type, and child SMILES.
+    """
+    reactions = []
+    if node is None:
+        return reactions
+    if not getattr(node, "is_leaf", True) and node.children:
+        rxn_info = getattr(node, "reaction_info", None)
+        bond = getattr(node, "bond_type", None)
+        reactions.append({
+            "parent": node.smiles[:60],
+            "reaction": rxn_info.name if rxn_info else "BRICS",
+            "bond_type": f"{bond[0]}-{bond[1]}" if bond else None,
+            "children": [c.smiles[:60] for c in node.children],
+        })
+        for c in node.children:
+            reactions.extend(get_retro_node_reactions(c))
+    return reactions
+
+
+def get_retro_node_leaf_sets(node):
+    if node is None:
+        return []
+    if getattr(node, "is_leaf", False):
+        bbs = getattr(node, "bb_smiles", None)
+        if bbs:
+            can_bbs = set()
+            for bb in bbs:
+                mol = Chem.MolFromSmiles(bb)
+                if mol:
+                    can_bbs.add(Chem.MolToSmiles(mol))
+                else:
+                    can_bbs.add(bb)
+            return [can_bbs]
+        # Fallback to fragment smiles
+        mol = Chem.MolFromSmiles(node.smiles)
+        if mol:
+            return [{Chem.MolToSmiles(mol)}]
+        return [{node.smiles}]
+    leaf_sets = []
+    for c in getattr(node, "children", []):
+        leaf_sets.extend(get_retro_node_leaf_sets(c))
+    return leaf_sets
+
+
+def _init_worker(mol_props_path, fp_size, tiers, timeout, max_depth, max_nodes, reference_routes=None):
     """Initialize per-worker globals (called once per pool process)."""
     global _worker_cf, _worker_lib, _worker_tiers
-    global _worker_timeout, _worker_max_depth, _worker_max_nodes
+    global _worker_timeout, _worker_max_depth, _worker_max_nodes, _worker_reference_routes
     _worker_cf = load_compound_filter(mol_props_path, fpSize=fp_size)
     _worker_lib = ReactionLibrary.default() if any(t in tiers for t in ["2", "3"]) else None
     _worker_tiers = tiers
     _worker_timeout = timeout
     _worker_max_depth = max_depth
     _worker_max_nodes = max_nodes
+    _worker_reference_routes = reference_routes
 
 
 # ---------------------------------------------------------------------------
@@ -80,7 +242,13 @@ def run_tier3(smiles, cf, lib, timeout, max_depth=5, max_nodes=2000):
     try:
         from fragmentretro.smarts_retro import SmartsRetrosynthesis
 
-        retro = SmartsRetrosynthesis(lib, max_depth=max_depth, max_nodes=max_nodes)
+        retro = SmartsRetrosynthesis(
+            lib, 
+            max_depth=max_depth, 
+            max_nodes=max_nodes,
+            min_bb_heavy_atoms=getattr(cf, "min_heavy_atoms", 0),
+            max_bb_heavy_atoms=getattr(cf, "max_heavy_atoms", 100)
+        )
 
         def is_purchasable(smi):
             try:
@@ -104,9 +272,19 @@ def run_tier3(smiles, cf, lib, timeout, max_depth=5, max_nodes=2000):
 
         best_route_solved = (routes_info[0]["solved"] if routes_info else False)
 
-        # Derive score from best route (same logic as compute_score_smarts)
+        # Derive score from best route
+        best_route_leaves = []
+        best_route_reactions = []
         if routes:
             best = max(routes, key=lambda r: (r.is_solved, r.avg_reliability))
+            for n in _iter_leaves_t3(best):
+                mol = Chem.MolFromSmiles(n.smiles)
+                if mol:
+                    best_route_leaves.append(Chem.MolToSmiles(mol))
+                else:
+                    best_route_leaves.append(n.smiles)
+            # Extract reactions from the best route tree
+            best_route_reactions = _collect_t3_reactions(best)
             if best.is_solved:
                 reliability_score = best.avg_reliability
                 steps = best.num_steps
@@ -125,11 +303,14 @@ def run_tier3(smiles, cf, lib, timeout, max_depth=5, max_nodes=2000):
             "score": round(score, 6),
             "n_routes": len(routes_info),
             "best_route": routes_info[0] if routes_info else None,
+            "predicted_leaves": list(set(best_route_leaves)),
+            "reactions": best_route_reactions,
             "time_s": round(time.time() - t0, 4),
         }
     except Exception as e:
         return {"tier": "3_smarts", "solved": False, "score": 0.0,
-                "n_routes": 0, "best_route": None,
+                "n_routes": 0, "best_route": None, "predicted_leaves": [],
+                "reactions": [],
                 "time_s": round(time.time() - t0, 4), "error": str(e)}
 
 
@@ -140,6 +321,24 @@ def _iter_leaves_t3(node):
     else:
         for c in node.children:
             yield from _iter_leaves_t3(c)
+
+
+def _collect_t3_reactions(node):
+    """Extract reactions from a RetroSynthNode tree."""
+    reactions = []
+    if node.is_leaf:
+        return reactions
+    rxn = getattr(node, "reaction", None)
+    reactions.append({
+        "parent": node.smiles[:60],
+        "reaction": rxn.name if rxn else None,
+        "class": rxn.reaction_class if rxn else None,
+        "reliability": round(rxn.reliability, 4) if rxn else None,
+        "children": [c.smiles[:60] for c in node.children],
+    })
+    for c in node.children:
+        reactions.extend(_collect_t3_reactions(c))
+    return reactions
 
 
 # ---------------------------------------------------------------------------
@@ -165,6 +364,7 @@ def _process_molecule(task):
     timeout = _worker_timeout
     max_depth = _worker_max_depth
     max_nodes = _worker_max_nodes
+    ref_routes = _worker_reference_routes
 
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
@@ -223,6 +423,8 @@ def _process_molecule(task):
 
             if need_dag:
                 dr = brics_result.dag_result
+                pred_leaf_sets = get_retro_node_leaf_sets(dr.dag) if dr.feasible and dr.dag else []
+                pred_leaves_rep = [list(s)[0] for s in pred_leaf_sets if s]
                 mol_result["tiers"]["1_dag"] = {
                     "tier": "1_dag",
                     "solved": dr.feasible,
@@ -234,11 +436,19 @@ def _process_molecule(task):
                     "step_score": round(dr.step_score, 4),
                     "availability_score": round(dr.availability_score, 4),
                     "bond_feasibility_score": round(dr.bond_feasibility_score, 4),
+                    "predicted_leaves": pred_leaves_rep,
+                    "reactions": get_retro_node_reactions(dr.dag) if dr.feasible and dr.dag else [],
                     "time_s": per_tier_time,
                 }
+                
+                ref_leaves = ref_routes.get(canonical) if ref_routes else None
+                if ref_leaves is not None:
+                    mol_result["tiers"]["1_dag"]["route_similarity"] = compute_route_similarity(set(ref_leaves), set(pred_leaves_rep))
 
             if need_validated and brics_result.validated_result is not None:
                 vr = brics_result.validated_result
+                pred_leaf_sets = get_retro_node_leaf_sets(vr.dag) if vr.feasible and vr.dag else []
+                pred_leaves_rep = [list(s)[0] for s in pred_leaf_sets if s]
                 mol_result["tiers"]["2_validated"] = {
                     "tier": "2_validated",
                     "solved": vr.feasible and vr.validation_coverage >= 1.0,
@@ -254,8 +464,14 @@ def _process_molecule(task):
                     ],
                     "n_matched": len(vr.matched_reactions),
                     "constraints_satisfied": vr.constraints_satisfied,
+                    "predicted_leaves": pred_leaves_rep,
+                    "reactions": get_retro_node_reactions(vr.dag) if vr.feasible and vr.dag else [],
                     "time_s": per_tier_time,
                 }
+                
+                ref_leaves = ref_routes.get(canonical) if ref_routes else None
+                if ref_leaves is not None:
+                    mol_result["tiers"]["2_validated"]["route_similarity"] = compute_route_similarity(set(ref_leaves), set(pred_leaves_rep))
 
         except Exception as e:
             # Fallback: mark all requested BRICS tiers as failed
@@ -269,8 +485,12 @@ def _process_molecule(task):
 
     # --- T3: separate engine (SMARTS retrosynthesis) ---
     if "3" in tiers:
-        mol_result["tiers"]["3_smarts"] = run_tier3(canonical, cf, lib, timeout,
-                                                     max_depth, max_nodes)
+        t3_res = run_tier3(canonical, cf, lib, timeout, max_depth, max_nodes)
+        ref_leaves = ref_routes.get(canonical) if ref_routes else None
+        if ref_leaves is not None and "predicted_leaves" in t3_res:
+             pred_set = set(t3_res["predicted_leaves"])
+             t3_res["route_similarity"] = compute_route_similarity(set(ref_leaves), pred_set)
+        mol_result["tiers"]["3_smarts"] = t3_res
 
     return mol_result
 
@@ -280,13 +500,13 @@ def _process_molecule(task):
 # ---------------------------------------------------------------------------
 
 def run_benchmark(targets, config, tiers, timeout=120.0,
-                  max_depth=5, max_nodes=2000, n_workers=1):
+                  max_depth=5, max_nodes=2000, n_workers=1, reference_routes=None):
     mol_props_path = config["fragmentretro_stock"]
     fp_size = config.get("fp_size", 2048)
 
     if n_workers > 1:
         return _run_benchmark_parallel(targets, config, tiers, timeout,
-                                        max_depth, max_nodes, n_workers)
+                                        max_depth, max_nodes, n_workers, reference_routes)
 
     # --- Serial mode ---
     print(f"Loading CompoundFilter from {mol_props_path} ...")
@@ -301,13 +521,14 @@ def run_benchmark(targets, config, tiers, timeout=120.0,
 
     # Set globals for _process_molecule
     global _worker_cf, _worker_lib, _worker_tiers
-    global _worker_timeout, _worker_max_depth, _worker_max_nodes
+    global _worker_timeout, _worker_max_depth, _worker_max_nodes, _worker_reference_routes
     _worker_cf = cf
     _worker_lib = lib
     _worker_tiers = tiers
     _worker_timeout = timeout
     _worker_max_depth = max_depth
     _worker_max_nodes = max_nodes
+    _worker_reference_routes = reference_routes
 
     results = []
     n_total = len(targets)
@@ -336,7 +557,7 @@ def run_benchmark(targets, config, tiers, timeout=120.0,
 
 
 def _run_benchmark_parallel(targets, config, tiers, timeout,
-                            max_depth, max_nodes, n_workers):
+                            max_depth, max_nodes, n_workers, reference_routes=None):
     """Run benchmark using multiprocessing pool."""
     import multiprocessing as mp
 
@@ -352,7 +573,7 @@ def _run_benchmark_parallel(targets, config, tiers, timeout,
     with mp.Pool(
         processes=n_workers,
         initializer=_init_worker,
-        initargs=(mol_props_path, fp_size, tiers, timeout, max_depth, max_nodes),
+        initargs=(mol_props_path, fp_size, tiers, timeout, max_depth, max_nodes, reference_routes),
     ) as pool:
         results_unordered = []
         for mol_result in pool.imap_unordered(_process_molecule, tasks, chunksize=4):
@@ -435,6 +656,16 @@ def compute_summary(results):
         if coverages:
             stats["mean_validation_coverage"] = round(sum(coverages) / len(coverages), 4)
 
+        # Route similarity aggregation
+        sim_results = [t["route_similarity"] for t in tier_results if "route_similarity" in t]
+        if sim_results:
+            for metric in ["jaccard", "recall", "precision", "max_tanimoto"]:
+                vals = [s[metric] for s in sim_results]
+                stats[f"mean_{metric}"] = round(sum(vals) / len(vals), 4)
+            stats["exact_match_rate"] = round(
+                sum(1 for s in sim_results if s["jaccard"] >= 1.0) / len(sim_results), 4
+            )
+
         errors = sum(1 for t in tier_results if "error" in t)
         if errors:
             stats["errors"] = errors
@@ -464,6 +695,8 @@ def main():
                         help="Tier 3 max tree depth")
     parser.add_argument("--max-nodes", type=int, default=2000,
                         help="Tier 3 max nodes to explore")
+    parser.add_argument("--reference", type=str, default=None,
+                        help="Path to reference routes JSON (e.g. n1-routes.json) for exact match comparison")
     parser.add_argument("--workers", "-j", type=int, default=1,
                         help="Number of parallel workers (default: 1 = serial). "
                              "Each worker loads its own CompoundFilter and "
@@ -498,12 +731,17 @@ def main():
     print(f"  Workers:    {n_workers}" + (" (parallel)" if n_workers > 1 else " (serial)"))
     print()
 
+    reference_routes = None
+    if args.reference:
+        reference_routes = load_reference_routes(args.reference)
+
     t_start = time.time()
     results = run_benchmark(targets, config, args.tiers,
                             timeout=args.timeout,
                             max_depth=args.max_depth,
                             max_nodes=args.max_nodes,
-                            n_workers=n_workers)
+                            n_workers=n_workers,
+                            reference_routes=reference_routes)
     total_time = time.time() - t_start
 
     summary = compute_summary(results)
@@ -527,10 +765,13 @@ def main():
 
     for tier in sorted(k for k in summary if k.startswith(("1_", "2_", "3_"))):
         s = summary[tier]
-        print(f"  {tier:20s}  solve={s['solve_rate']:.1%}  "
+        s_str = (f"  {tier:20s}  solve={s['solve_rate']:.1%}  "
               f"score={s['mean_score']:.3f}  "
               f"time={s['mean_time_s']:.3f}s/mol  "
               f"(total={s['total_time_s']:.1f}s)")
+        if "mean_jaccard" in s:
+            s_str += f" J={s['mean_jaccard']:.3f} R={s['mean_recall']:.3f} T={s['mean_max_tanimoto']:.3f}"
+        print(s_str)
         if "mean_steps" in s:
             print(f"  {'':20s}  steps={s['mean_steps']:.1f}  "
                   f"lls={s.get('mean_lls', 'N/A')}  "

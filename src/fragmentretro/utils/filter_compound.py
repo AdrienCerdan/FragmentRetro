@@ -92,6 +92,12 @@ class CompoundFilter:
         self._load_mol_properties()
         self._create_numpy_arrays()
 
+        # Stock statistics for fast pruning
+        self.min_heavy_atoms = int(self.num_heavy_atoms_array.min()) if self.len_BBs > 0 else 0
+        self.max_heavy_atoms = int(self.num_heavy_atoms_array.max()) if self.len_BBs > 0 else 0
+        self.min_rings = int(self.num_rings_array.min()) if self.len_BBs > 0 else 0
+        self.max_rings = int(self.num_rings_array.max()) if self.len_BBs > 0 else 0
+
     def _load_mol_properties(self) -> None:
         """Loads molecular properties from the JSON file."""
 
@@ -179,9 +185,9 @@ class CompoundFilter:
         This is a convenience method for purchasability checking, used by
         the SMARTS retrosynthesis engine (Tier 3 scoring).
 
-        Uses an early-exit strategy: instead of computing all filtered indices
-        (O(n_BBs)), returns True as soon as a single match is found. This
-        significantly reduces cost for large BB catalogs.
+        Uses an early-exit strategy:
+        1. Cheap bounds check (heavy atoms, rings)
+        2. Vectorized PFP subset check (returns True at first any() match)
 
         Args:
             smiles: Query SMILES string.
@@ -197,6 +203,13 @@ class CompoundFilter:
 
         num_heavy_atoms = mol_properties["num_heavy_atoms"]
         num_rings = mol_properties["num_rings"]
+
+        # 1. Fast bounds check
+        if num_heavy_atoms > self.max_heavy_atoms or num_heavy_atoms < self.min_heavy_atoms:
+            return False
+        if num_rings > self.max_rings:
+            return False
+
         pfp = mol_properties["pfp"]
         pfp_len = len(pfp)
 

@@ -135,6 +135,29 @@ class SubstructureMatcher:
         return adjusted_smarts
 
     @staticmethod
+    @functools.lru_cache(maxsize=4096)
+    def _get_fragment_mol(fragment_smiles: str) -> Chem.Mol:
+        """Cached compilation of fragment SMARTS into a Mol object."""
+        # Convert fragment SMILES to SMARTS pattern (cached)
+        fragment_smarts = SubstructureMatcher.convert_to_smarts(fragment_smiles)
+        # Add hydrogen atoms to wildcard neighbors (cached)
+        fragment_smarts_withH = SubstructureMatcher.addH_to_wildcard_neighbors(fragment_smarts)
+        mol = Chem.MolFromSmarts(fragment_smarts_withH)
+        if mol is None:
+            raise ValueError(f"Invalid fragment SMARTS: {fragment_smarts_withH}")
+        return mol
+
+    @staticmethod
+    @functools.lru_cache(maxsize=16384)
+    def _get_molecule_mol_with_hs(molecule_smiles: str) -> Chem.Mol:
+        """Cached parsing and AddHs for building block molecules."""
+        mol = Chem.MolFromSmiles(molecule_smiles)
+        if mol is None:
+            raise ValueError(f"Invalid SMILES string: {molecule_smiles}")
+        mol = Chem.AddHs(mol)
+        return mol
+
+    @staticmethod
     def is_strict_substructure(fragment_smiles: str, molecule_smiles: str, useChirality: bool = True) -> bool:
         """
         Check if the fragment is a strict substructure of the molecule. No extra atoms or
@@ -149,17 +172,9 @@ class SubstructureMatcher:
         Returns:
             True if the fragment is a strict substructure of the molecule, False otherwise.
         """
-        # Convert fragment SMILES to SMARTS pattern (cached)
-        fragment_smarts = SubstructureMatcher.convert_to_smarts(fragment_smiles)
-        # Add hydrogen atoms to wildcard neighbors (cached)
-        fragment_smarts_withH = SubstructureMatcher.addH_to_wildcard_neighbors(fragment_smarts)
+        fragment_mol_withH = SubstructureMatcher._get_fragment_mol(fragment_smiles)
+        molecule_mol = SubstructureMatcher._get_molecule_mol_with_hs(molecule_smiles)
 
-        fragment_mol_withH = Chem.MolFromSmarts(fragment_smarts_withH)
-        molecule_mol = Chem.MolFromSmiles(molecule_smiles)
-        molecule_mol = Chem.AddHs(molecule_mol)
-
-        if molecule_mol is None:
-            raise ValueError(f"Invalid SMILES string: {molecule_smiles}")
         return cast(bool, molecule_mol.HasSubstructMatch(fragment_mol_withH, useChirality=useChirality))
 
     def has_any_substructure_BB(self, fragment: str) -> bool:

@@ -744,7 +744,7 @@ def compute_all_brics_tiers(
     include_validated: bool = False,
     # Shared retro params
     use_rbrics: bool = True,
-    solution_cap: int = 5,
+    solution_cap: int = 10,
     # Continuous scoring weights
     cont_step_weight: float = 0.35,
     cont_availability_weight: float = 0.30,

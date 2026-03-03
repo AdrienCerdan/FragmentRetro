@@ -3,6 +3,8 @@ import logging.config
 import os
 from typing import Any
 
+from rdkit import rdBase
+
 # --- Hardcoded Configuration ---
 LOGGING_CONFIG: dict[str, Any] = {
     "version": 1,
@@ -31,6 +33,15 @@ LOGGING_CONFIG: dict[str, Any] = {
 # --- End Hardcoded Configuration ---
 
 
+def suppress_rdkit_logs() -> None:
+    """Disable common RDKit warnings (valence, aromaticity, etc.) from console.
+
+    Highly recommended during retrosynthesis searches where reverse SMARTS
+    application produces many expected but noisy warnings.
+    """
+    rdBase.DisableLog("rdApp.*")
+
+
 def setup_logging() -> None:
     """Setup logging configuration from hardcoded dict with environment variable override"""
 
@@ -47,6 +58,10 @@ def setup_logging() -> None:
     LOGGING_CONFIG["loggers"]["fragment"]["level"] = log_level
 
     logging.config.dictConfig(LOGGING_CONFIG)
+
+    # Automatically suppress RDKit logs if not in DEBUG mode
+    if log_level != "DEBUG":
+        suppress_rdkit_logs()
 
 
 logger = logging.getLogger("fragment")

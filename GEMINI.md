@@ -3,19 +3,15 @@ Adrien is developing FragmentRetro, a retrosynthesis scoring and benchmarking sy
 Current state
 Recent work has focused on two major tracks:
 
-Performance optimization: Identified and resolved critical redundancy where _run_retro() was called independently per tier. Implemented a unified compute_all_brics_tiers() function to share results across tiers, delivering ~2.8× speedup on BRICS tiers. Optimized has_match() with early-exit logic.
-Bug fixes and correctness: Resolved dummy atom (*) contamination in SMILES from reverse SMARTS reactions, fixed broken SMARTS patterns in the reaction catalog, corrected a silent failure in constraints filtering, and addressed AiZynthFinder API compatibility issues. Critically, corrected T2's "solved" flag to require full SMARTS validation coverage rather than just BRICS decomposition success—a previously misleading definition that inflated apparent T2 performance.
-T3 overhaul: Rewrote the SmartsRetrosynthesis engine with pre-filtering, purchasability caching, best-first search by reaction reliability, early termination, and increased node budget. Solve rate improved from ~30% to ~80% with a major reduction in per-molecule processing time.
-Parallelization: Added multiprocessing support to the benchmark runner (--workers/-j flags) with worker initialization to avoid re-serializing large numpy arrays.
+- **Clean Logging**: Centralized RDKit and internal `fragmentretro` log suppression in `logging_config.py`. This eliminated verbose valence/aromaticity warnings and initialization noise, facilitating large-scale benchmark monitoring.
+- **Scaling Optimizations**: Implemented cross-molecule reaction caching in T3 and molecular object caching in `SubstructureMatcher`, delivering significant overhead reduction for deep search trees.
+- **Non-Greedy BRICS**: Tier 2 now evaluates multiple decompositions (up to 10 solutions) to ensure optimal SMARTS validation coverage, moving beyond the greedy "shortest-path" approach.
 
-On the horizon
-Three concrete improvement areas identified for FragmentRetro's next iteration:
+### On the horizon
+- **PaRoutes N1 Benchmark**: 10,000 molecule full-tier run (T1-T3) currently in progress with similarity metrics.
+- **Route similarity analysis**: Investigating edge cases where FragmentRetro routes significantly diverge from PaRoutes references despite high scores.
+- **Global search strategy**: Exploring true priority-queue based search for T3 rather than best-first DFS.
 
-Exploring multiple BRICS decompositions instead of greedily selecting the shortest
-Implementing functional group pre-filtering for T3 reactions
-Adding stock-aware pruning to avoid expanding fragments that cannot match available building blocks
-
-Open questions remain around the decoupled scoring logic causing inconsistencies between tier-level and route-level solved flags in detailed results.
 Key learnings & principles
 
 Tier definitions matter scientifically: The T2 solved flag bug revealed how inherited flags from upstream steps (BRICS decomposition) can silently misrepresent what a tier actually validates. Tier definitions must be independently verified.

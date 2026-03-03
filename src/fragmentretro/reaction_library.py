@@ -116,20 +116,33 @@ class Reaction:
             logger.debug(f"[ReactionLibrary] Failed to parse reverse SMARTS for {self.id}: {e}")
             return None
 
-    def matches_product(self, product_mol: Chem.Mol) -> bool:
-        """Check if a product molecule could have been made by this reaction.
+    @lru_cache(maxsize=1)
+    def product_query(self) -> Optional[Chem.Mol]:
+        """Compile the product side of the SMARTS into a query mol (cached).
 
-        Uses the product side of the SMARTS as a substructure query.
+        Used for fast substructure pre-filtering: check if a target molecule
+        contains the functional groups required by this reaction.
         """
         product_smarts = self.smarts_forward.split(">>")[-1]
         try:
-            query = Chem.MolFromSmarts(product_smarts)
-            if query is None:
-                return False
+            return Chem.MolFromSmarts(product_smarts)
+        except Exception:
+            return None
+
+    def matches_product(self, product_mol: Chem.Mol) -> bool:
+        """Check if a product molecule could have been made by this reaction.
+
+        Uses a pre-compiled product SMARTS query for fast substructure matching.
+        """
+        query = self.product_query()
+        if query is None:
+            return False
+        try:
             return product_mol.HasSubstructMatch(query)
         except Exception:
             return False
 
+    @lru_cache(maxsize=4096)
     def apply_reverse(self, product_smiles: str) -> list[tuple[str, ...]]:
         """Apply the reaction in reverse to get possible reactant sets.
 

@@ -149,11 +149,15 @@ class SmartsRetrosynthesis:
         max_depth: int = 5,
         max_nodes: int = 2000,
         constraints: ConstraintConfig | None = None,
+        min_bb_heavy_atoms: int = 0,
+        max_bb_heavy_atoms: int = 100,
     ):
         self.library = library
         self.max_depth = max_depth
         self.max_nodes = max_nodes
         self.constraints = constraints
+        self.min_bb_heavy_atoms = min_bb_heavy_atoms
+        self.max_bb_heavy_atoms = max_bb_heavy_atoms
         self._nodes_explored = 0
 
         # Apply constraints to library if provided
@@ -166,6 +170,12 @@ class SmartsRetrosynthesis:
             key=lambda r: r.reliability,
             reverse=True,
         )
+
+        # Pre-compile product SMARTS queries for fast substructure pre-filtering.
+        # This warms the lru_cache on each Reaction so that _expand() never
+        # pays the SMARTS parsing cost.
+        for rxn in self._sorted_reactions:
+            rxn.product_query()
 
     def retrosynthesise(
         self,
@@ -189,6 +199,8 @@ class SmartsRetrosynthesis:
         self._purchasable_cache: dict[str, bool] = {}
         # Track globally expanded (smiles, depth) to avoid re-expansion
         self._expanded: set[str] = set()
+        # Memoize solved/attempted routes for this molecule
+        self._memo: dict[str, list[RetroSynthNode]] = {}
 
         mol = Chem.MolFromSmiles(target_smiles)
         if mol is None:
@@ -201,20 +213,12 @@ class SmartsRetrosynthesis:
         if is_purchasable and self._check_purchasable(canonical, is_purchasable):
             return [RetroSynthNode(smiles=canonical, is_building_block=True)]
 
-        # Suppress RDKit warnings during search (reverse SMARTS produce
-        # many expected valence / aromatic warnings that slow down via I/O)
-        from rdkit import rdBase
-        rdBase.DisableLog('rdApp.*')
-
-        try:
-            routes = self._expand(
-                canonical,
-                depth=0,
-                is_purchasable=is_purchasable,
-                visited=frozenset(),
-            )
-        finally:
-            rdBase.EnableLog('rdApp.*')
+        return self._expand(
+            canonical,
+            depth=0,
+            is_purchasable=is_purchasable,
+            visited=frozenset(),
+        )
 
         # Sort: solved first, then by avg_reliability descending
         routes.sort(key=lambda r: (r.is_solved, r.avg_reliability), reverse=True)
@@ -259,6 +263,9 @@ class SmartsRetrosynthesis:
 
         # Global deduplication: skip if already expanded at same or shallower depth
         dedup_key = smiles
+        if dedup_key in self._memo:
+            # Reuse cached result (and adjust depths if needed, though they are relative)
+            return self._memo[dedup_key]
         if dedup_key in self._expanded:
             is_bb = (
                 self._check_purchasable(smiles, is_purchasable)
@@ -270,11 +277,20 @@ class SmartsRetrosynthesis:
 
         new_visited = visited | {smiles}
 
-        # Pre-filter: only attempt reactions whose product SMARTS matches
+        # Size-based pruning: if fragment is much larger than max BB size
+        # and has few steps left, it's unlikely to reach stock
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:
             return [RetroSynthNode(smiles=smiles, depth=depth)]
 
+        n_heavy = mol.GetNumHeavyAtoms()
+        remaining_steps = self.max_depth - depth
+        # Heuristic: each step can at most reduce size by ~50% or remove ~20 atoms
+        if n_heavy > self.max_bb_heavy_atoms + (remaining_steps * 20):
+            is_bb = self._check_purchasable(smiles, is_purchasable) if is_purchasable else False
+            return [RetroSynthNode(smiles=smiles, depth=depth, is_building_block=is_bb)]
+
+        # Pre-filter: only attempt reactions whose product SMARTS matches
         routes: list[RetroSynthNode] = []
         found_solved = False
 
@@ -334,6 +350,12 @@ class SmartsRetrosynthesis:
                             )
                         ])
                     else:
+                        # Pruning: if fragment is already smaller than any BB and not a BB, stop
+                        # (in retrosynthesis, fragments only get smaller, so this is a dead end)
+                        if r_mol.GetNumHeavyAtoms() < self.min_bb_heavy_atoms:
+                            valid = False
+                            break
+
                         sub_trees = self._expand(
                             r_canonical, depth + 1, is_purchasable, new_visited
                         )
@@ -376,6 +398,10 @@ class SmartsRetrosynthesis:
                 if is_purchasable
                 else False
             )
-            return [RetroSynthNode(smiles=smiles, depth=depth, is_building_block=is_bb)]
+            res = [RetroSynthNode(smiles=smiles, depth=depth, is_building_block=is_bb)]
+        else:
+            res = routes
 
-        return routes
+        # Memoize result
+        self._memo[dedup_key] = res
+        return res
