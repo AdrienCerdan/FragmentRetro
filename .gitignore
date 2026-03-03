@@ -57,3 +57,4 @@ data/buyables/
 data/precompute/
 benchmark_*
 aizynthfinder
+*.json

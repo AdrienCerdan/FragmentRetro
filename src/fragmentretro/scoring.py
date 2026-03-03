@@ -470,102 +470,122 @@ def compute_score_validated(
     if not retro_solution.solutions:
         return DAGScoreResult(score=0.0, feasible=False)
 
-    best_solution: SolutionType = min(retro_solution.solutions, key=len)
-    num_frags = len(best_solution)
-    max_frags = retro_tool.num_fragments
+    # Evaluate all generated solutions to maximize validation coverage
+    sorted_solutions = sorted(retro_solution.solutions, key=len)
+    
+    best_result = None
+    best_coverage = -1.0
+    best_total_score = -1.0
 
-    # Step score
-    step_score = 1.0 if max_frags <= 1 else 1.0 - (num_frags - 1) / (max_frags - 1)
+    for current_solution in sorted_solutions:
+        num_frags = len(current_solution)
+        max_frags = retro_tool.num_fragments
 
-    # BB availability
-    bb_counts = []
-    for comb in best_solution:
-        bbs = retro_tool.comb_bbs_dict.get(comb, set())
-        bb_counts.append(len(bbs))
-    min_bb_count = min(bb_counts) if bb_counts else 0
-    availability_score = min(1.0, math.log1p(min_bb_count) / math.log1p(100))
+        # Step score
+        step_score = 1.0 if max_frags <= 1 else 1.0 - (num_frags - 1) / (max_frags - 1)
 
-    # Bond feasibility (heuristic baseline)
-    bond_types = retro_tool.fragmenter.get_bond_types_for_solution(best_solution)
-    bond_feasibility_score = get_solution_bond_feasibility(bond_types)
+        # BB availability
+        bb_counts = []
+        for comb in current_solution:
+            bbs = retro_tool.comb_bbs_dict.get(comb, set())
+            bb_counts.append(len(bbs))
+        min_bb_count = min(bb_counts) if bb_counts else 0
+        availability_score = min(1.0, math.log1p(min_bb_count) / math.log1p(100))
 
-    # Build DAG
-    matched_reactions: list[tuple[str, float]] = []
-    validation_coverage = 0.0
-    constraints_satisfied = True
+        # Bond feasibility (heuristic baseline)
+        bond_types = retro_tool.fragmenter.get_bond_types_for_solution(current_solution)
+        bond_feasibility_score = get_solution_bond_feasibility(bond_types)
 
-    try:
-        dag = build_best_dag(best_solution, retro_tool.fragmenter, retro_tool.comb_bbs_dict)
-        convergence = dag.convergence_score
-        lls = dag.longest_linear_sequence
-        total_steps = dag.num_steps
-        n_bbs = dag.num_leaves
+        # Build DAG
+        matched_reactions: list[tuple[str, float]] = []
+        validation_coverage = 0.0
+        constraints_satisfied = True
 
-        # LLS score
-        if n_bbs <= 1:
-            lls_score = 1.0
+        try:
+            dag = build_best_dag(current_solution, retro_tool.fragmenter, retro_tool.comb_bbs_dict)
+            convergence = dag.convergence_score
+            lls = dag.longest_linear_sequence
+            total_steps = dag.num_steps
+            n_bbs = dag.num_leaves
+
+            # LLS score
+            if n_bbs <= 1:
+                lls_score = 1.0
+            else:
+                worst_lls = n_bbs - 1
+                lls_score = max(0.0, min(1.0, 1.0 - (lls - 1) / max(worst_lls - 1, 1)))
+
+            # SMARTS validation
+            matched_reactions, validation_coverage = _validate_dag_with_smarts(dag, active_lib)
+
+            # Check constraints
+            if cfg:
+                constraints_satisfied = cfg.check_route_metrics(total_steps, lls)
+                if cfg.require_all_validated and validation_coverage < 1.0:
+                    constraints_satisfied = False
+
+        except Exception as e:
+            logger.warning(f"[Scoring] DAG construction failed for {smiles}: {e}")
+            convergence = 0.5
+            lls_score = 0.5
+            lls = num_frags - 1
+            total_steps = num_frags - 1
+            n_bbs = num_frags
+            dag = None
+
+        # Validation score: combination of coverage and avg reliability of matched
+        if matched_reactions:
+            avg_rel = sum(r for _, r in matched_reactions) / len(matched_reactions)
+            validation_score = validation_coverage * avg_rel
         else:
-            worst_lls = n_bbs - 1
-            lls_score = max(0.0, min(1.0, 1.0 - (lls - 1) / max(worst_lls - 1, 1)))
+            validation_score = 0.0
 
-        # SMARTS validation
-        matched_reactions, validation_coverage = _validate_dag_with_smarts(dag, active_lib)
+        # Penalize if constraints not satisfied
+        constraint_multiplier = 1.0 if constraints_satisfied else 0.5
 
-        # Check constraints
-        if cfg:
-            constraints_satisfied = cfg.check_route_metrics(total_steps, lls)
-            if cfg.require_all_validated and validation_coverage < 1.0:
-                constraints_satisfied = False
+        total = constraint_multiplier * (
+            step_weight * step_score
+            + availability_weight * availability_score
+            + feasibility_weight * bond_feasibility_score
+            + convergence_weight * convergence
+            + lls_weight * lls_score
+            + validation_weight * validation_score
+        )
+        
+        # Determine if this is the best solution found so far
+        # Primary objective: maximize validation coverage
+        # Secondary objective: maximize total score (which penalizes longer solutions)
+        if best_result is None or validation_coverage > best_coverage or (validation_coverage == best_coverage and total > best_total_score):
+            best_coverage = validation_coverage
+            best_total_score = total
+            
+            best_result = DAGScoreResult(
+                score=total,
+                feasible=True,
+                total_steps=total_steps,
+                longest_linear_sequence=lls,
+                num_building_blocks=n_bbs,
+                convergence_score=convergence,
+                step_score=step_score,
+                availability_score=availability_score,
+                bond_feasibility_score=bond_feasibility_score,
+                dag=dag,
+                matched_reactions=matched_reactions,
+                validation_coverage=validation_coverage,
+                constraints_satisfied=constraints_satisfied,
+            )
 
-    except Exception as e:
-        logger.warning(f"[Scoring] DAG construction failed for {smiles}: {e}")
-        convergence = 0.5
-        lls_score = 0.5
-        lls = num_frags - 1
-        total_steps = num_frags - 1
-        n_bbs = num_frags
-        dag = None
+    if best_result is None:
+         return DAGScoreResult(score=0.0, feasible=False)
 
-    # Validation score: combination of coverage and avg reliability of matched
-    if matched_reactions:
-        avg_rel = sum(r for _, r in matched_reactions) / len(matched_reactions)
-        validation_score = validation_coverage * avg_rel
-    else:
-        validation_score = 0.0
-
-    # Penalize if constraints not satisfied
-    constraint_multiplier = 1.0 if constraints_satisfied else 0.5
-
-    total = constraint_multiplier * (
-        step_weight * step_score
-        + availability_weight * availability_score
-        + feasibility_weight * bond_feasibility_score
-        + convergence_weight * convergence
-        + lls_weight * lls_score
-        + validation_weight * validation_score
-    )
 
     logger.debug(
-        f"[Scoring+SMARTS] {smiles}: steps={step_score:.2f}, avail={availability_score:.2f}, "
-        f"bond_feas={bond_feasibility_score:.2f}, conv={convergence:.2f}, "
-        f"lls={lls_score:.2f}, valid={validation_score:.2f}, total={total:.2f}"
+        f"[Scoring+SMARTS] {smiles}: steps={best_result.step_score:.2f}, avail={best_result.availability_score:.2f}, "
+        f"bond_feas={best_result.bond_feasibility_score:.2f}, conv={best_result.convergence_score:.2f}, "
+        f"valid={best_result.validation_coverage:.2f}, total={best_result.score:.2f}"
     )
 
-    return DAGScoreResult(
-        score=total,
-        feasible=True,
-        total_steps=total_steps,
-        longest_linear_sequence=lls,
-        num_building_blocks=n_bbs,
-        convergence_score=convergence,
-        step_score=step_score,
-        availability_score=availability_score,
-        bond_feasibility_score=bond_feasibility_score,
-        dag=dag,
-        matched_reactions=matched_reactions,
-        validation_coverage=validation_coverage,
-        constraints_satisfied=constraints_satisfied,
-    )
+    return best_result
 
 
 # ---------------------------------------------------------------------------
@@ -809,7 +829,8 @@ def compute_all_brics_tiers(
         )
 
     # --- Shared computation for continuous / DAG / validated ---
-    best_solution: SolutionType = min(retro_solution.solutions, key=len)
+    sorted_solutions = sorted(retro_solution.solutions, key=len)
+    best_solution: SolutionType = sorted_solutions[0]
     num_frags = len(best_solution)
     max_frags = retro_tool.num_fragments
 
@@ -884,10 +905,6 @@ def compute_all_brics_tiers(
     # --- T2 validated score ---
     validated_result: DAGScoreResult | None = None
     if include_validated:
-        matched_reactions: list[tuple[str, float]] = []
-        validation_coverage = 0.0
-        constraints_satisfied = True
-
         cfg = build_constraints(
             constraints=constraints,
             allowed_reactions=allowed_reactions,
@@ -903,47 +920,98 @@ def compute_all_brics_tiers(
         if cfg and reaction_library is not None:
             active_lib = cfg.get_filtered_library(reaction_library)
 
-        if dag is not None and active_lib is not None:
-            matched_reactions, validation_coverage = _validate_dag_with_smarts(dag, active_lib)
+        best_val_result = None
+        best_coverage = -1.0
+        best_total_score = -1.0
 
-            if cfg:
-                constraints_satisfied = cfg.check_route_metrics(total_steps, lls)
-                if cfg.require_all_validated and validation_coverage < 1.0:
-                    constraints_satisfied = False
+        for current_solution in sorted_solutions:
+            # Recompute components for current_solution
+            cur_num_frags = len(current_solution)
+            cur_step_score = 1.0 if max_frags <= 1 else 1.0 - (cur_num_frags - 1) / (max_frags - 1)
+            
+            cur_bb_counts = []
+            for comb in current_solution:
+                bbs = retro_tool.comb_bbs_dict.get(comb, set())
+                cur_bb_counts.append(len(bbs))
+            cur_min_bb_count = min(cur_bb_counts) if cur_bb_counts else 0
+            cur_availability_score = min(1.0, math.log1p(cur_min_bb_count) / math.log1p(100))
+            
+            cur_bond_types = retro_tool.fragmenter.get_bond_types_for_solution(current_solution)
+            cur_bond_feasibility_score = get_solution_bond_feasibility(cur_bond_types)
+            
+            cur_dag = None
+            cur_convergence = 0.5
+            cur_lls = cur_num_frags - 1
+            cur_total_steps = cur_num_frags - 1
+            cur_n_bbs = cur_num_frags
+            cur_lls_score = 0.5
+            
+            try:
+                cur_dag = build_best_dag(current_solution, retro_tool.fragmenter, retro_tool.comb_bbs_dict)
+                cur_convergence = cur_dag.convergence_score
+                cur_lls = cur_dag.longest_linear_sequence
+                cur_total_steps = cur_dag.num_steps
+                cur_n_bbs = cur_dag.num_leaves
 
-        # Validation score
-        if matched_reactions:
-            avg_rel = sum(r for _, r in matched_reactions) / len(matched_reactions)
-            validation_score = validation_coverage * avg_rel
-        else:
-            validation_score = 0.0
+                if cur_n_bbs <= 1:
+                    cur_lls_score = 1.0
+                else:
+                    worst_lls = cur_n_bbs - 1
+                    cur_lls_score = max(0.0, min(1.0, 1.0 - (cur_lls - 1) / max(worst_lls - 1, 1)))
+            except Exception as e:
+                logger.warning(f"[Scoring] DAG construction failed for {smiles} during T2: {e}")
 
-        constraint_multiplier = 1.0 if constraints_satisfied else 0.5
+            matched_reactions: list[tuple[str, float]] = []
+            validation_coverage = 0.0
+            constraints_satisfied = True
 
-        val_total = constraint_multiplier * (
-            val_step_weight * step_score
-            + val_availability_weight * availability_score
-            + val_feasibility_weight * bond_feasibility_score
-            + val_convergence_weight * convergence
-            + val_lls_weight * lls_score
-            + val_validation_weight * validation_score
-        )
+            if cur_dag is not None and active_lib is not None:
+                matched_reactions, validation_coverage = _validate_dag_with_smarts(cur_dag, active_lib)
 
-        validated_result = DAGScoreResult(
-            score=val_total,
-            feasible=True,
-            total_steps=total_steps,
-            longest_linear_sequence=lls,
-            num_building_blocks=n_bbs,
-            convergence_score=convergence,
-            step_score=step_score,
-            availability_score=availability_score,
-            bond_feasibility_score=bond_feasibility_score,
-            dag=dag,
-            matched_reactions=matched_reactions,
-            validation_coverage=validation_coverage,
-            constraints_satisfied=constraints_satisfied,
-        )
+                if cfg:
+                    constraints_satisfied = cfg.check_route_metrics(cur_total_steps, cur_lls)
+                    if cfg.require_all_validated and validation_coverage < 1.0:
+                        constraints_satisfied = False
+
+            # Validation score
+            if matched_reactions:
+                avg_rel = sum(r for _, r in matched_reactions) / len(matched_reactions)
+                validation_score = validation_coverage * avg_rel
+            else:
+                validation_score = 0.0
+
+            constraint_multiplier = 1.0 if constraints_satisfied else 0.5
+
+            val_total = constraint_multiplier * (
+                val_step_weight * cur_step_score
+                + val_availability_weight * cur_availability_score
+                + val_feasibility_weight * cur_bond_feasibility_score
+                + val_convergence_weight * cur_convergence
+                + val_lls_weight * cur_lls_score
+                + val_validation_weight * validation_score
+            )
+            
+            if best_val_result is None or validation_coverage > best_coverage or (validation_coverage == best_coverage and val_total > best_total_score):
+                best_coverage = validation_coverage
+                best_total_score = val_total
+
+                best_val_result = DAGScoreResult(
+                    score=val_total,
+                    feasible=True,
+                    total_steps=cur_total_steps,
+                    longest_linear_sequence=cur_lls,
+                    num_building_blocks=cur_n_bbs,
+                    convergence_score=cur_convergence,
+                    step_score=cur_step_score,
+                    availability_score=cur_availability_score,
+                    bond_feasibility_score=cur_bond_feasibility_score,
+                    dag=cur_dag,
+                    matched_reactions=matched_reactions,
+                    validation_coverage=validation_coverage,
+                    constraints_satisfied=constraints_satisfied,
+                )
+
+        validated_result = best_val_result if best_val_result is not None else DAGScoreResult(score=0.0, feasible=False)
 
     return AllBricsTiersResult(
         binary=binary_result,
