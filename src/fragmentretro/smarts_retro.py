@@ -309,7 +309,9 @@ class SmartsRetrosynthesis:
                 break
 
             # Early termination: once we have a solved route, skip lower-reliability reactions
-            if found_solved:
+            # At depth 0, we still explore all reactant sets from the current reaction
+            # to find alternative routes (e.g., bromination vs double-Suzuki).
+            if found_solved and depth > 0:
                 break
 
             if self.constraints and not self.constraints.is_reaction_allowed(rxn):
@@ -418,7 +420,8 @@ class SmartsRetrosynthesis:
 
                 if node.is_solved:
                     found_solved = True
-                    break
+                    if depth > 0:
+                        break
 
         if not routes:
             is_bb = (

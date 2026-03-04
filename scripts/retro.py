@@ -42,7 +42,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from rdkit import Chem
 
 from fragmentretro.constraints import ConstraintConfig, build_constraints
-from fragmentretro.reaction_library import ReactionLibrary
+from fragmentretro.reaction_library import ReactionLibrary, HARTENFELLER_PATH, EXPLORE_PATH, AIZYNTHFINDER_PATH
 from fragmentretro.scoring import load_compound_filter
 from fragmentretro.smarts_retro import RetroSynthNode, SmartsRetrosynthesis
 from fragmentretro.utils.logging_config import logger, setup_logging
@@ -62,7 +62,24 @@ def _init_worker(mol_props_path, fp_size, opts):
     """Initialize per-worker globals."""
     global _worker_cf, _worker_lib, _worker_opts
     _worker_cf = load_compound_filter(mol_props_path, fpSize=fp_size)
-    _worker_lib = ReactionLibrary.default()
+
+    # Load specific catalogs if provided
+    catalogs = opts.get("catalogs")
+    if catalogs:
+        paths = []
+        for c in catalogs:
+            if c.lower() == "hartenfeller":
+                paths.append(HARTENFELLER_PATH)
+            elif c.lower() == "explore":
+                paths.append(EXPLORE_PATH)
+            elif c.lower() == "aizynthfinder":
+                paths.append(AIZYNTHFINDER_PATH)
+            else:
+                paths.append(Path(c))
+        _worker_lib = ReactionLibrary.from_files(paths)
+    else:
+        _worker_lib = ReactionLibrary.default()
+
     _worker_opts = opts
 
 
@@ -300,26 +317,40 @@ def write_json_output(results: list[dict], summary: dict, path: Path):
 def write_csv_output(results: list[dict], path: Path):
     """Write CSV summary output."""
     fields = [
-        "smiles", "solved", "score", "n_routes",
-        "steps", "lls", "n_bbs", "avg_reliability", "time_s", "error",
+        "smiles", "route_rank", "solved", "score", "n_routes",
+        "steps", "lls", "n_bbs", "avg_reliability", "reaction", "time_s", "error",
     ]
     with open(path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writeheader()
         for r in results:
-            br = r.get("best_route") or {}
-            writer.writerow({
-                "smiles": r["smiles"],
-                "solved": r["solved"],
-                "score": r["score"],
-                "n_routes": r["n_routes"],
-                "steps": br.get("steps", ""),
-                "lls": br.get("lls", ""),
-                "n_bbs": br.get("n_bbs", ""),
-                "avg_reliability": br.get("avg_reliability", ""),
-                "time_s": r["time_s"],
-                "error": r.get("error", ""),
-            })
+            if not r.get("routes"):
+                # No routes found or error
+                writer.writerow({
+                    "smiles": r["smiles"],
+                    "route_rank": 0,
+                    "solved": r["solved"],
+                    "score": r["score"],
+                    "n_routes": r["n_routes"],
+                    "steps": "", "lls": "", "n_bbs": "", "avg_reliability": "",
+                    "reaction": "", "time_s": r["time_s"], "error": r.get("error", ""),
+                })
+            else:
+                for i, route_info in enumerate(r["routes"]):
+                    writer.writerow({
+                        "smiles": r["smiles"],
+                        "route_rank": i + 1,
+                        "solved": route_info["solved"],
+                        "score": r["score"],
+                        "n_routes": r["n_routes"],
+                        "steps": route_info["steps"],
+                        "lls": route_info["lls"],
+                        "n_bbs": route_info["n_bbs"],
+                        "avg_reliability": route_info["avg_reliability"],
+                        "reaction": route_info["reaction"] or "",
+                        "time_s": r["time_s"],
+                        "error": r.get("error", ""),
+                    })
 
 
 def print_text_result(result: dict, verbose: bool = False):
@@ -335,22 +366,17 @@ def print_text_result(result: dict, verbose: bool = False):
         print(f"  {solved} {smi[:60]:60s}  ERROR: {error}")
         return
 
-    br = result.get("best_route") or {}
-    steps = br.get("steps", "-")
-    lls = br.get("lls", "-")
-    n_bbs = br.get("n_bbs", "-")
-    rel = br.get("avg_reliability", 0)
+    print(f"  {solved} {smi[:55]:55s}  score={score:.3f}  routes={n_routes:2d}  ({time_s:.2f}s)")
 
-    print(
-        f"  {solved} {smi[:60]:60s}  "
-        f"score={score:.3f}  routes={n_routes}  "
-        f"steps={steps}  lls={lls}  bbs={n_bbs}  "
-        f"rel={rel:.3f}  ({time_s:.2f}s)"
-    )
+    if n_routes > 0:
+        for i, route in enumerate(result.get("routes", [])):
+            r_solved = "✓" if route["solved"] else "✗"
+            print(f"      [{i+1}] {r_solved} steps={route['steps']}  lls={route['lls']}  bbs={route['n_bbs']}  rel={route['avg_reliability']:.3f}")
 
     if verbose and result.get("_route_objects"):
-        best = result["_route_objects"][0]
-        print(best.pretty_print())
+        for i, route_obj in enumerate(result["_route_objects"]):
+            print(f"\n      --- Route {i+1} ---")
+            print(route_obj.pretty_print(indent=3))
         print()
 
 
@@ -472,6 +498,8 @@ Examples:
                         help="Max nodes to explore per molecule (default: 2000)")
     parser.add_argument("--timeout", type=float, default=120.0,
                         help="Timeout per molecule in seconds (default: 120)")
+    parser.add_argument("--catalogs", nargs="+", default=["hartenfeller", "explore", "aizynthfinder"],
+                        help="Reaction catalogs to use. Options: hartenfeller, explore, aizynthfinder, or path to json. Default: all three.")
 
     # Constraints
     constraint_group = parser.add_argument_group("Constraints")
@@ -499,8 +527,8 @@ Examples:
                                help="Generate route figures (PNG)")
     output_group.add_argument("--figures-dir", type=str, default="./routes",
                                help="Directory for route figures (default: ./routes)")
-    output_group.add_argument("--max-figures", type=int, default=3,
-                               help="Max routes to draw per molecule (default: 3)")
+    output_group.add_argument("--max-figures", type=int, default=None,
+                               help="Max routes to draw per molecule (default: same as --max-routes)")
     output_group.add_argument("--verbose", "-v", action="store_true",
                                help="Verbose output with route tree pretty-printing")
 
@@ -518,7 +546,17 @@ Examples:
 
     # --- List reactions mode ---
     if args.list_reactions:
-        lib = ReactionLibrary.default()
+        paths = []
+        for c in args.catalogs:
+            if c.lower() == "hartenfeller":
+                paths.append(HARTENFELLER_PATH)
+            elif c.lower() == "explore":
+                paths.append(EXPLORE_PATH)
+            elif c.lower() == "aizynthfinder":
+                paths.append(AIZYNTHFINDER_PATH)
+            else:
+                paths.append(Path(c))
+        lib = ReactionLibrary.from_files(paths)
         print(f"\n{'ID':6s}  {'Name':45s}  {'Class':20s}  {'Reliability':12s}  Source")
         print("-" * 100)
         for rxn in sorted(lib.reactions, key=lambda r: (r.reaction_class, r.name)):
@@ -563,6 +601,7 @@ Examples:
         "max_nodes": args.max_nodes,
         "strict": args.strict,
         "constraints": constraints,
+        "catalogs": args.catalogs,
     }
 
     n_workers = args.workers
@@ -580,6 +619,7 @@ Examples:
     print(f"  Max depth:   {args.max_depth}")
     print(f"  Max nodes:   {args.max_nodes}")
     print(f"  Max routes:  {args.max_routes}")
+    print(f"  Catalogs:    {', '.join(args.catalogs)}")
     print(f"  Strict:      {'Yes' if args.strict else 'No'}")
     if constraints:
         if constraints.allowed_reactions:
@@ -616,6 +656,7 @@ Examples:
         "max_depth": args.max_depth,
         "max_nodes": args.max_nodes,
         "max_routes": args.max_routes,
+        "catalogs": args.catalogs,
         "workers": n_workers,
     }
     if constraints:
@@ -631,7 +672,8 @@ Examples:
     if args.figures:
         fig_dir = Path(args.figures_dir)
         print(f"\nGenerating route figures in {fig_dir} ...")
-        n_drawn = generate_figures(results, fig_dir, max_routes_to_draw=args.max_figures)
+        max_figs = args.max_figures if args.max_figures is not None else args.max_routes
+        n_drawn = generate_figures(results, fig_dir, max_routes_to_draw=max_figs)
         print(f"  {n_drawn} figures generated")
 
     # --- Output ---
@@ -671,7 +713,17 @@ def _run_serial(targets, args, opts):
     print(f"  {cf.len_BBs} building blocks loaded")
 
     print("Loading ReactionLibrary ...")
-    lib = ReactionLibrary.default()
+    paths = []
+    for c in args.catalogs:
+        if c.lower() == "hartenfeller":
+            paths.append(HARTENFELLER_PATH)
+        elif c.lower() == "explore":
+            paths.append(EXPLORE_PATH)
+        elif c.lower() == "aizynthfinder":
+            paths.append(AIZYNTHFINDER_PATH)
+        else:
+            paths.append(Path(c))
+    lib = ReactionLibrary.from_files(paths)
     print(f"  {len(lib)} reactions loaded\n")
 
     constraints = opts.get("constraints")

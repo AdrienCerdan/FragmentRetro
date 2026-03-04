@@ -58,3 +58,6 @@ data/precompute/
 benchmark_*
 aizynthfinder
 ./*.json
+*.png
+results.json
+results.json

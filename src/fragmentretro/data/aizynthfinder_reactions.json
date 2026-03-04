@@ -1,0 +1,16 @@
+{
+    "source": "AiZynthFinder USPTO templates (manually curated subset)",
+    "description": "Reactions extracted from AiZynthFinder's USPTO template library that are absent from Hartenfeller and eXplore catalogs. These cover common transformations like halogenation that rule-based catalogs lack.",
+    "reactions": [
+        {
+            "id": "aizf_rxn001",
+            "name": "aromatic_bromination",
+            "class": "substitution",
+            "product_class": "bromo_arene",
+            "smarts_forward": "[c:1][cH:2][c:3]>>[c:1][c:2](-Br)[c:3]",
+            "num_reactants": 1,
+            "reliability": 0.7,
+            "notes": "Aromatic bromination (e.g. NBS, Br2). Note: Regioselectivity is not predicted by this rule-based model; results should be verified for site-selectivity."
+        }
+    ]
+}

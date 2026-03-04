@@ -28,36 +28,36 @@ from fragmentretro.utils.logging_config import logger
 _DATA_DIR = Path(__file__).parent / "data"
 HARTENFELLER_PATH = _DATA_DIR / "hartenfeller_reactions.json"
 EXPLORE_PATH = _DATA_DIR / "explore_reactions.json"
+AIZYNTHFINDER_PATH = _DATA_DIR / "aizynthfinder_reactions.json"
 
 
-def _replace_dummy_atoms(smiles: str) -> str | None:
-    """Replace dummy atoms in a SMILES with hydrogen and re-canonicalize.
+def _replace_dummy_atoms(smiles: str, replacement: str = "[H]") -> str | None:
+    """Replace dummy atoms in a SMILES with a specific atom/group and re-canonicalize.
 
     Dummy atoms ('*') arise when reverse SMARTS application cannot resolve
     ambiguous atom patterns (e.g., [Cl,Br,I] becomes '*').  Replacing with
-    hydrogen gives the molecular core, which is appropriate for substructure-
-    based purchasability checks against a building-block catalog.
+    hydrogen gives the molecular core, but replacing with explicit halogens
+    allows accurate purchased-BB matching (e.g., finding actual aryl bromides).
 
     Fragments with fewer than 2 heavy atoms after replacement are discarded
-    as artifacts of spurious SMARTS matches (e.g., Suzuki matching at an
-    alkyl–aryl bond yields '*[C]' → '[CH]', which is chemically nonsensical
-    as a building block).
+    as artifacts of spurious SMARTS matches.
 
     Args:
         smiles: SMILES that may contain '*' atoms.
+        replacement: SMILES fragment to replace '*' with (default: '[H]').
 
     Returns:
-        Canonical SMILES without dummy atoms, or None if the result is
+        Canonical SMILES with dummy atoms replaced, or None if the result is
         chemically invalid or too small to be a meaningful building block.
     """
     # Replace bracketed forms [1*], [*] and bare *
-    cleaned = re.sub(r"\[\d*\*\]", "[H]", smiles)
-    cleaned = re.sub(r"(?<!\[)\*(?!\])", "[H]", cleaned)
+    cleaned = re.sub(r"\[\d*\*\]", replacement, smiles)
+    cleaned = re.sub(r"(?<!\[)\*(?!\])", replacement, cleaned)
     mol = Chem.MolFromSmiles(cleaned)
     if mol is None:
         return None
     # Discard single-atom fragments (artifacts of wrong SMARTS match sites)
-    if mol.GetNumHeavyAtoms() < 2:
+    if mol.GetNumHeavyAtoms() < 2 and replacement == "[H]":
         return None
     return Chem.MolToSmiles(mol)
 
@@ -147,8 +147,8 @@ class Reaction:
         """Apply the reaction in reverse to get possible reactant sets.
 
         Dummy atoms ('*') produced by unresolved SMARTS patterns are replaced
-        with hydrogen and the result is re-canonicalized, so that downstream
-        purchasability checks work correctly.
+        with halogens or hydrogen based on the forward reaction's requirements,
+        so that downstream purchasability checks work correctly.
 
         Args:
             product_smiles: SMILES of the product molecule.
@@ -169,12 +169,26 @@ class Reaction:
         except Exception:
             return []
 
+        # Determine valid replacements for dummy atoms from SMARTS list queries
+        import itertools
+        replacements = ["[H]"]
+        sf = self.smarts_forward
+        if "[Cl,Br,I]" in sf or "[Br,Cl,I]" in sf or "[#17,#35,#53" in sf:
+            replacements = ["Cl", "Br", "I"]
+        elif "[Br,I]" in sf or "[I,Br]" in sf or "[#35,#53" in sf or "[#53,#35" in sf:
+            replacements = ["Br", "I"]
+        elif "[Cl,F]" in sf or "[F,Cl]" in sf:
+            replacements = ["Cl", "F"]
+        elif "[F,Cl,Br,I]" in sf or "[Cl,Br,I,F]" in sf:
+            replacements = ["F", "Cl", "Br", "I"]
+
+
         results: list[tuple[str, ...]] = []
         seen: set[tuple[str, ...]] = set()
 
         for products in product_sets:
-            reactant_smiles: list[str] = []
             valid = True
+            frag_combos = []
             for p in products:
                 try:
                     Chem.SanitizeMol(p)
@@ -182,23 +196,58 @@ class Reaction:
                     if not smi:
                         valid = False
                         break
-                    # Replace dummy atoms produced by unresolved SMARTS patterns
-                    # (e.g., [Cl,Br,I] -> *) with hydrogen, then re-canonicalize
+                    
                     if '*' in smi:
-                        smi = _replace_dummy_atoms(smi)
-                        if smi is None:
+                        opts = []
+                        for rep in replacements:
+                            cleaned = _replace_dummy_atoms(smi, rep)
+                            if cleaned:
+                                opts.append(cleaned)
+                        if not opts:
                             valid = False
                             break
-                    reactant_smiles.append(smi)
+                        frag_combos.append(opts)
+                    else:
+                        frag_combos.append([smi])
                 except Exception:
                     valid = False
                     break
 
-            if valid and reactant_smiles:
-                key = tuple(sorted(reactant_smiles))
-                if key not in seen:
-                    seen.add(key)
-                    results.append(tuple(reactant_smiles))
+            if valid and frag_combos:
+                fwd_rxn = self.rdkit_rxn()
+                for combo in itertools.product(*frag_combos):
+                    # Sort to ensure tuple equality for identical sets
+                    key = tuple(sorted(combo))
+                    if key in seen:
+                        continue
+                    
+                    # Validate that the assembled reactants can actually undergo
+                    # the forward reaction to produce the exact target product.
+                    # This prevents hallucinations from recursive SMARTS queries.
+                    combo_valid = False
+                    if fwd_rxn:
+                        combo_mols = [Chem.MolFromSmiles(s) for s in combo]
+                        if all(combo_mols):
+                            for perm in itertools.permutations(combo_mols):
+                                try:
+                                    fwd_prods = fwd_rxn.RunReactants(perm)
+                                    for fp in fwd_prods:
+                                        for fpmol in fp:
+                                            try:
+                                                Chem.SanitizeMol(fpmol)
+                                                if Chem.MolToSmiles(fpmol) == product_smiles:
+                                                    combo_valid = True
+                                                    break
+                                            except Exception:
+                                                pass
+                                        if combo_valid: break
+                                    if combo_valid: break
+                                except Exception:
+                                    pass
+                    
+                    if combo_valid:
+                        seen.add(key)
+                        results.append(key)
 
         return results
 
@@ -356,11 +405,22 @@ class ReactionLibrary:
         return lib
 
     @classmethod
-    def default(cls) -> ReactionLibrary:
-        """Load both Hartenfeller + eXplore catalogs."""
+    def default(cls) -> "ReactionLibrary":
+        """Load Hartenfeller + eXplore + AiZynthFinder catalogs."""
         lib = cls()
         lib.load_json(HARTENFELLER_PATH, source="hartenfeller")
         lib.load_json(EXPLORE_PATH, source="explore")
+        lib.load_json(AIZYNTHFINDER_PATH, source="aizynthfinder")
+        return lib
+
+    @classmethod
+    def from_files(cls, paths: list[Path | str]) -> "ReactionLibrary":
+        """Load reactions from a list of JSON files."""
+        lib = cls()
+        for path in paths:
+            path_obj = Path(path)
+            source_name = path_obj.stem
+            lib.load_json(path_obj, source=source_name)
         return lib
 
     # --- Filtering ---

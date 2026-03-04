@@ -8,7 +8,10 @@
       "class": "ring_closure",
       "product_class": "tetrahydroisoquinoline",
       "smarts_forward": "[cH1:1]1:[c:2](-[CH2:7]-[CH2:8]-[NH2:9]):[c:3]:[c:4]:[c:5]:[c:6]:1.[#6:11]-[CH1;R0:10]=[OD1]>>[c:1]12:[c:2](-[CH2:7]-[CH2:8]-[NH1:9]-[C:10]-2(-[#6:11])):[c:3]:[c:4]:[c:5]:[c:6]:1",
-      "reactant_smiles": ["c1cc(CCN)ccc1", "CC(=O)"],
+      "reactant_smiles": [
+        "c1cc(CCN)ccc1",
+        "CC(=O)"
+      ],
       "num_reactants": 2,
       "reliability": 0.8,
       "notes": "Step potentially produces regioisomers because of symmetric substructure definition."
@@ -19,7 +22,10 @@
       "class": "ring_closure",
       "product_class": "benzimidazole",
       "smarts_forward": "[c;r6:1](-[NH1;$(N-[#6]):2]):[c;r6:3](-[NH2:4]).[#6:6]-[C;R0:5](=[OD1])-[#8;H1,$(O-[CH3])]>>[c:3]2:[c:1]:[n:2]:[c:5](-[#6:6]):[n:4]@2",
-      "reactant_smiles": ["c1c(NC)c(N)ccc1", "CC(=O)O"],
+      "reactant_smiles": [
+        "c1c(NC)c(N)ccc1",
+        "CC(=O)O"
+      ],
       "num_reactants": 2,
       "reliability": 0.85,
       "notes": "Any six-membered aromatic heterocycle"
@@ -30,7 +36,10 @@
       "class": "ring_closure",
       "product_class": "benzimidazole",
       "smarts_forward": "[c;r6:1](-[NH1;$(N-[#6]):2]):[c;r6:3](-[NH2:4]).[#6:6]-[CH1;R0:5](=[OD1])>>[c:3]2:[c:1]:[n:2]:[c:5](-[#6:6]):[n:4]@2",
-      "reactant_smiles": ["c1c(NC)c(N)ccc1", "CC(=O)"],
+      "reactant_smiles": [
+        "c1c(NC)c(N)ccc1",
+        "CC(=O)"
+      ],
       "num_reactants": 2,
       "reliability": 0.85,
       "notes": "Any six-membered aromatic heterocycle"
@@ -41,7 +50,10 @@
       "class": "ring_closure",
       "product_class": "benzothiazole",
       "smarts_forward": "[c;r6:1](-[SH1:2]):[c;r6:3](-[NH2:4]).[#6:6]-[CH1;R0:5](=[OD1])>>[c:3]2:[c:1]:[s:2]:[c:5](-[#6:6]):[n:4]@2",
-      "reactant_smiles": ["c1c(S)c(N)ccc1", "CC(=O)"],
+      "reactant_smiles": [
+        "c1c(S)c(N)ccc1",
+        "CC(=O)"
+      ],
       "num_reactants": 2,
       "reliability": 0.8,
       "notes": "Any six-membered aromatic heterocycle"
@@ -52,7 +64,10 @@
       "class": "ring_closure",
       "product_class": "benzoxazole",
       "smarts_forward": "[c:1](-[OH1;$(Oc1ccccc1):2]):[c;r6:3](-[NH2:4]).[c:6]-[CH1;R0:5](=[OD1])>>[c:3]2:[c:1]:[o:2]:[c:5](-[c:6]):[n:4]@2",
-      "reactant_smiles": ["c1cc(O)c(N)cc1", "c1ccccc1C(=O)"],
+      "reactant_smiles": [
+        "c1cc(O)c(N)cc1",
+        "c1ccccc1C(=O)"
+      ],
       "num_reactants": 2,
       "reliability": 0.8,
       "notes": ""
@@ -63,7 +78,10 @@
       "class": "ring_closure",
       "product_class": "benzoxazole",
       "smarts_forward": "[c;r6:1](-[OH1:2]):[c;r6:3](-[NH2:4]).[#6:6]-[C;R0:5](=[OD1])-[OH1]>>[c:3]2:[c:1]:[o:2]:[c:5](-[#6:6]):[n:4]@2",
-      "reactant_smiles": ["c1cc(O)c(N)cc1", "CC(=O)O"],
+      "reactant_smiles": [
+        "c1cc(O)c(N)cc1",
+        "CC(=O)O"
+      ],
       "num_reactants": 2,
       "reliability": 0.8,
       "notes": "Any six-membered aromatic heterocycle"
@@ -74,7 +92,10 @@
       "class": "ring_closure",
       "product_class": "thiazole",
       "smarts_forward": "[#6:6]-[C;R0:1](=[OD1])-[CH1;R0:5](-[#6:7])-[*;#17,#35,#53].[NH2:2]-[C:3]=[SD1:4]>>[c:1]2(-[#6:6]):[n:2]:[c:3]:[s:4][c:5]([#6:7]):2",
-      "reactant_smiles": ["CC(=O)C(I)C", "NC(=S)C"],
+      "reactant_smiles": [
+        "CC(=O)C(I)C",
+        "NC(=S)C"
+      ],
       "num_reactants": 2,
       "reliability": 0.85,
       "notes": "X=Cl, Br, I (Hantzsch thiazole synthesis)"
@@ -85,7 +106,10 @@
       "class": "ring_closure",
       "product_class": "quinazoline",
       "smarts_forward": "[c:1](-[C;$(C-c1ccccc1):2](=[OD1:3])-[OH1]):[c:4](-[NH2:5]).[N;!H0;!$(N-N);!$(N-C=N);!$(N(-C=O)-C=O):6]-[C;H1,$(C-[#6]):7]=[OD1]>>[c:4]2:[c:1]-[C:2](=[O:3])-[N:6]-[C:7]=[N:5]-2",
-      "reactant_smiles": ["c1c(C(=O)O)c(N)ccc1", "C(=O)N"],
+      "reactant_smiles": [
+        "c1c(C(=O)O)c(N)ccc1",
+        "C(=O)N"
+      ],
       "num_reactants": 2,
       "reliability": 0.75,
       "notes": ""
@@ -96,7 +120,9 @@
       "class": "ring_closure",
       "product_class": "tetrazole",
       "smarts_forward": "[CH0;$(C-[#6]):1]#[NH0:2]>>[C:1]1=[N:2]-N-N=N-1",
-      "reactant_smiles": ["CC#N"],
+      "reactant_smiles": [
+        "CC#N"
+      ],
       "num_reactants": 1,
       "reliability": 0.85,
       "notes": "Transform with NaN3"
@@ -107,7 +133,10 @@
       "class": "ring_closure",
       "product_class": "tetrazole",
       "smarts_forward": "[CH0;$(C-[#6]):1]#[NH0:2].[C;A;!$(C=O):3]-[*;#17,#35,#53]>>[C:1]1=[N:2]-N(-[C:3])-N=N-1",
-      "reactant_smiles": ["CC#N", "CBr"],
+      "reactant_smiles": [
+        "CC#N",
+        "CBr"
+      ],
       "num_reactants": 2,
       "reliability": 0.7,
       "notes": "Not regioselective; Additional step: substitute halogen with azide (NaN3)"
@@ -118,7 +147,10 @@
       "class": "ring_closure",
       "product_class": "tetrazole",
       "smarts_forward": "[CH0;$(C-[#6]):1]#[NH0:2].[C;A;!$(C=O):3]-[*;#17,#35,#53]>>[C:1]1=[N:2]-N=N-N-1(-[C:3])",
-      "reactant_smiles": ["CC#N", "CBr"],
+      "reactant_smiles": [
+        "CC#N",
+        "CBr"
+      ],
       "num_reactants": 2,
       "reliability": 0.7,
       "notes": "Not regioselective"
@@ -129,7 +161,10 @@
       "class": "ring_closure",
       "product_class": "1,2,3-triazole",
       "smarts_forward": "[CH0;$(C-[#6]):1]#[CH1:2].[C;H1,H2;A;!$(C=O):3]-[*;#17,#35,#53,OH1]>>[C:1]1=[C:2]-N(-[C:3])-N=N-1",
-      "reactant_smiles": ["CC#C", "CCBr"],
+      "reactant_smiles": [
+        "CC#C",
+        "CCBr"
+      ],
       "num_reactants": 2,
       "reliability": 0.9,
       "notes": "CuAAC click chemistry. X=Cl,Br,I,OH. Additional step: halide/alcohol to azide"
@@ -140,7 +175,10 @@
       "class": "ring_closure",
       "product_class": "1,2,3-triazole",
       "smarts_forward": "[CH0;$(C-[#6]):1]#[CH1:2].[C;H1,H2;A;!$(C=O):3]-[*;#17,#35,#53,OH1]>>[C:1]1=[C:2]-N=NN(-[C:3])-1",
-      "reactant_smiles": ["CC#C", "CCBr"],
+      "reactant_smiles": [
+        "CC#C",
+        "CCBr"
+      ],
       "num_reactants": 2,
       "reliability": 0.8,
       "notes": "Ruthenium catalysis gives 1,5-substituted triazoles"
@@ -151,7 +189,10 @@
       "class": "ring_closure",
       "product_class": "1,2,3-triazole",
       "smarts_forward": "[CH0;$(C-[#6]):1]#[CH0;$(C-[#6]):2].[C;H1,H2;A;!$(C=O):3]-[*;#17,#35,#53,OH1]>>[C:1]1=[C:2]-N=NN(-[C:3])-1",
-      "reactant_smiles": ["CC#CC", "CCBr"],
+      "reactant_smiles": [
+        "CC#CC",
+        "CCBr"
+      ],
       "num_reactants": 2,
       "reliability": 0.7,
       "notes": "Not regioselective for non-symmetric alkynes"
@@ -162,7 +203,10 @@
       "class": "ring_closure",
       "product_class": "1,2,4-triazole",
       "smarts_forward": "[CH0;$(C-[#6]):1]#[NH0:2].[NH2:3]-[NH1:4]-[CH0;$(C-[#6]);R0:5]=[OD1]>>[N:2]1-[C:1]=[N:3]-[N:4]-[C:5]=1",
-      "reactant_smiles": ["CC#N", "NNC(=O)C"],
+      "reactant_smiles": [
+        "CC#N",
+        "NNC(=O)C"
+      ],
       "num_reactants": 2,
       "reliability": 0.8,
       "notes": ""
@@ -173,7 +217,10 @@
       "class": "ring_closure",
       "product_class": "1,2,4-triazole",
       "smarts_forward": "[CH0;$(C-[#6]):1]#[NH0:2].[CH0;$(C-[#6]);R0:5](=[OD1])-[#8;H1,$(O-[CH3]),$(O-[CH2]-[CH3])]>>[N:2]1-[C:1]=N-N-[C:5]=1",
-      "reactant_smiles": ["CC#N", "OC(=O)C"],
+      "reactant_smiles": [
+        "CC#N",
+        "OC(=O)C"
+      ],
       "num_reactants": 2,
       "reliability": 0.75,
       "notes": "Additional step: nuc. sub. with hydrazine"
@@ -184,7 +231,9 @@
       "class": "ring_closure",
       "product_class": "pyridine",
       "smarts_forward": "[#6;!$([#6](-C=O)-C=O):4]-[CH0:1](=[OD1])-[C;H1&!$(C-[*;!#6])&!$(C-C(=O)O),H2:2]-[CH0;R0:3](=[OD1])-[#6;!$([#6](-C=O)-C=O):5]>>[c:1]1(-[#6:4]):[c:2]:[c:3](-[#6:5]):n:c(-O):c(-C#N):1",
-      "reactant_smiles": ["CC(=O)CC(=O)C"],
+      "reactant_smiles": [
+        "CC(=O)CC(=O)C"
+      ],
       "num_reactants": 1,
       "reliability": 0.65,
       "notes": "Potentially produces regioisomers"
@@ -195,7 +244,10 @@
       "class": "ring_closure",
       "product_class": "spirochromanone",
       "smarts_forward": "[c:1](-[C;$(C-c1ccccc1):2](=[OD1:3])-[CH3:4]):[c:5](-[OH1:6]).[C;$(C1-[CH2]-[CH2]-[N,C]-[CH2]-[CH2]-1):7](=[OD1])>>[O:6]1-[c:5]:[c:1]-[C:2](=[OD1:3])-[C:4]-[C:7]-1",
-      "reactant_smiles": ["c1cc(C(=O)C)c(O)cc1", "C1(=O)CCNCC1"],
+      "reactant_smiles": [
+        "c1cc(C(=O)C)c(O)cc1",
+        "C1(=O)CCNCC1"
+      ],
       "num_reactants": 2,
       "reliability": 0.7,
       "notes": ""
@@ -206,7 +258,10 @@
       "class": "ring_closure",
       "product_class": "pyrazole",
       "smarts_forward": "[#6;!$([#6](-C=O)-C=O):4]-[CH0:1](=[OD1])-[C;H1&!$(C-[*;!#6])&!$(C-C(=O)O),H2:2]-[CH0;R0:3](=[OD1])-[#6;!$([#6](-C=O)-C=O):5].[NH2:6]-[N;!H0;$(N-[#6]),H2:7]>>[C:1]1(-[#6:4])-[C:2]=[C:3](-[#6:5])-[N:7]-[N:6]=1",
-      "reactant_smiles": ["CC(=O)CC(=O)C", "NNC"],
+      "reactant_smiles": [
+        "CC(=O)CC(=O)C",
+        "NNC"
+      ],
       "num_reactants": 2,
       "reliability": 0.85,
       "notes": "Potentially produces regioisomers"
@@ -217,7 +272,10 @@
       "class": "ring_closure",
       "product_class": "phthalazinone",
       "smarts_forward": "[c;r6:1](-[C;$(C=O):6]-[OH1]):[c;r6:2]-[C;H1,$(C-C):3]=[OD1].[NH2:4]-[NH1;$(N-[#6]);!$(NC=[O,S,N]):5]>>[c:1]1:[c:2]-[C:3]=[N:4]-[N:5]-[C:6]-1",
-      "reactant_smiles": ["c1cc(C(=O)O)c(C(=O)C)cc1", "NNC"],
+      "reactant_smiles": [
+        "c1cc(C(=O)O)c(C(=O)C)cc1",
+        "NNC"
+      ],
       "num_reactants": 2,
       "reliability": 0.75,
       "notes": ""
@@ -228,7 +286,10 @@
       "class": "ring_closure",
       "product_class": "pyrrole",
       "smarts_forward": "[#6:5]-[C;R0:1](=[OD1])-[C;H1,H2:2]-[C;H1,H2:3]-[C:4](=[OD1])-[#6:6].[NH2;$(N-[C,N]);!$(NC=[O,S,N]);!$(N([#6])[#6]);!$(N~N~N):7]>>[C:1]1(-[#6:5])=[C:2]-[C:3]=[C:4](-[#6:6])-[N:7]-1",
-      "reactant_smiles": ["CC(=O)CCC(=O)C", "NC"],
+      "reactant_smiles": [
+        "CC(=O)CCC(=O)C",
+        "NC"
+      ],
       "num_reactants": 2,
       "reliability": 0.85,
       "notes": "Educt 2 must be primary amine"
@@ -239,7 +300,10 @@
       "class": "ring_closure",
       "product_class": "imidazole",
       "smarts_forward": "[C;$(C-c1ccccc1):1](=[OD1])-[C;D3;$(C-c1ccccc1):2]~[O;D1,H1].[CH1;$(C-c):3]=[OD1]>>[C:1]1-N=[C:3]-[NH1]-[C:2]=1",
-      "reactant_smiles": ["c1ccccc1C(=O)C(=O)c1ccccc1", "c1ccccc1C(=O)"],
+      "reactant_smiles": [
+        "c1ccccc1C(=O)C(=O)c1ccccc1",
+        "c1ccccc1C(=O)"
+      ],
       "num_reactants": 2,
       "reliability": 0.7,
       "notes": "Additional reactant: ammonium acetate"
@@ -250,7 +314,10 @@
       "class": "ring_closure",
       "product_class": "indole",
       "smarts_forward": "[NH1;$(N-c1ccccc1):1](-[NH2])-[c:5]:[cH1:4].[C;$(C([#6])[#6]):2](=[OD1])-[CH2;$(C([#6])[#6]);!$(C(C=O)C=O):3]>>[C:5]1-[N:1]-[C:2]=[C:3]-[C:4]:1",
-      "reactant_smiles": ["c1ccccc1NN", "CCC(=O)C"],
+      "reactant_smiles": [
+        "c1ccccc1NN",
+        "CCC(=O)C"
+      ],
       "num_reactants": 2,
       "reliability": 0.75,
       "notes": "Fischer indole synthesis. Potentially produces regioisomers."
@@ -261,7 +328,10 @@
       "class": "ring_closure",
       "product_class": "quinoline",
       "smarts_forward": "[NH2;$(N-c1ccccc1):1]-[c:2]:[c:3]-[CH1:4]=[OD1].[C;$(C([#6])[#6]):6](=[OD1])-[CH2;$(C([#6])[#6]);!$(C(C=O)C=O):5]>>[N:1]1-[c:2]:[c:3]-[C:4]=[C:5]-[C:6]:1",
-      "reactant_smiles": ["c1cccc(C=O)c1N", "CCC(=O)C"],
+      "reactant_smiles": [
+        "c1cccc(C=O)c1N",
+        "CCC(=O)C"
+      ],
       "num_reactants": 2,
       "reliability": 0.8,
       "notes": ""
@@ -272,7 +342,10 @@
       "class": "ring_closure",
       "product_class": "benzofuran",
       "smarts_forward": "[*;Br,I;$(*c1ccccc1)]-[c:1]:[c:2]-[OH1:3].[CH1:5]#[C;$(C-[#6]):4]>>[c:1]1:[c:2]-[O:3]-[C:4]=[C:5]-1",
-      "reactant_smiles": ["c1cc(I)c(O)cc1", "CC#C"],
+      "reactant_smiles": [
+        "c1cc(I)c(O)cc1",
+        "CC#C"
+      ],
       "num_reactants": 2,
       "reliability": 0.75,
       "notes": "Bromide and iodide allowed"
@@ -283,7 +356,10 @@
       "class": "ring_closure",
       "product_class": "benzothiophene",
       "smarts_forward": "[*;Br,I;$(*c1ccccc1)]-[c:1]:[c:2]-[SD2:3]-[CH3].[CH1:5]#[C;$(C-[#6]):4]>>[c:1]1:[c:2]-[S:3]-[C:4]=[C:5]-1",
-      "reactant_smiles": ["c1cc(I)c(SC)cc1", "CC#C"],
+      "reactant_smiles": [
+        "c1cc(I)c(SC)cc1",
+        "CC#C"
+      ],
       "num_reactants": 2,
       "reliability": 0.7,
       "notes": ""
@@ -294,7 +370,10 @@
       "class": "ring_closure",
       "product_class": "indole",
       "smarts_forward": "[*;Br,I;$(*c1ccccc1)]-[c:1]:[c:2]-[NH2:3].[CH1:5]#[C;$(C-[#6]):4]>>[c:1]1:[c:2]-[N:3]-[C:4]=[C:5]-1",
-      "reactant_smiles": ["c1cc(I)c(N)cc1", "CC#C"],
+      "reactant_smiles": [
+        "c1cc(I)c(N)cc1",
+        "CC#C"
+      ],
       "num_reactants": 2,
       "reliability": 0.8,
       "notes": "Larock indole synthesis"
@@ -305,7 +384,10 @@
       "class": "ring_closure",
       "product_class": "1,2,4-oxadiazole",
       "smarts_forward": "[#6:6][C:5]#[#7;D1:4].[#6:1][C:2](=[OD1:3])[OH1]>>[#6:6][c:5]1[n:4][o:3][c:2]([#6:1])n1",
-      "reactant_smiles": ["CC#N", "CC(=O)O"],
+      "reactant_smiles": [
+        "CC#N",
+        "CC(=O)O"
+      ],
       "num_reactants": 2,
       "reliability": 0.75,
       "notes": "Additional step: convert nitrile to amidoxime by hydroxylamine"
@@ -316,7 +398,10 @@
       "class": "substitution",
       "product_class": "ether",
       "smarts_forward": "[#6;$([#6]~[#6]);!$([#6]=O):2][#8;H1:3].[Cl,Br,I][#6;H2;$([#6]~[#6]):4]>>[CH2:4][O:3][#6:2]",
-      "reactant_smiles": ["CCO", "CCBr"],
+      "reactant_smiles": [
+        "CCO",
+        "CCBr"
+      ],
       "num_reactants": 2,
       "reliability": 0.9,
       "notes": "Primary halide (Cl, Br, I)"
@@ -327,21 +412,55 @@
       "class": "substitution",
       "product_class": "amine",
       "smarts_forward": "[#6:4]-[C;H1,$([CH0](-[#6])[#6]):1]=[OD1].[N;H2,$([NH1;D2](C)C);!$(N-[#6]=[*]):3]-[C:5]>>[#6:4][C:1]-[N:3]-[C:5]",
-      "reactant_smiles": ["CC(=O)", "NC"],
+      "reactant_smiles": [
+        "CC(=O)",
+        "NC"
+      ],
       "num_reactants": 2,
       "reliability": 0.85,
       "notes": ""
     },
     {
-      "id": "hartenfeller_31",
-      "name": "Suzuki",
+      "id": "hartenfeller_31_i",
+      "name": "Suzuki_I",
       "class": "coupling",
       "product_class": "biaryl",
-      "smarts_forward": "[#6;H0;D3;$([#6](~[#6])~[#6]):1]B(O)O.[#6;H0;D3;$([#6](~[#6])~[#6]):2][Cl,Br,I]>>[#6:2][#6:1]",
-      "reactant_smiles": ["c1ccccc1B(O)O", "c1ccccc1Br"],
+      "smarts_forward": "[#6;H0;D3;$([#6](~[#6])~[#6]):1]B(O)O.[#6;H0;D3;$([#6](~[#6])~[#6]):2][I]>>[#6:2][#6:1]",
+      "reactant_smiles": [
+        "c1ccccc1B(O)O",
+        "c1ccccc1I"
+      ],
+      "num_reactants": 2,
+      "reliability": 0.95,
+      "notes": "Selective Suzuki (Iodide)"
+    },
+    {
+      "id": "hartenfeller_31_br",
+      "name": "Suzuki_Br",
+      "class": "coupling",
+      "product_class": "biaryl",
+      "smarts_forward": "[#6;H0;D3;$([#6](~[#6])~[#6]):1]B(O)O.[#6;H0;D3;$([#6](~[#6])~[#6]):2][Br]>>[#6:2][#6:1]",
+      "reactant_smiles": [
+        "c1ccccc1B(O)O",
+        "c1ccccc1Br"
+      ],
       "num_reactants": 2,
       "reliability": 0.9,
-      "notes": "X=Cl, Br, I; any boronic acid (incl. cyclic)"
+      "notes": "Selective Suzuki (Bromide)"
+    },
+    {
+      "id": "hartenfeller_31_cl",
+      "name": "Suzuki_Cl",
+      "class": "coupling",
+      "product_class": "biaryl",
+      "smarts_forward": "[#6;H0;D3;$([#6](~[#6])~[#6]):1]B(O)O.[#6;H0;D3;$([#6](~[#6])~[#6]):2][Cl]>>[#6:2][#6:1]",
+      "reactant_smiles": [
+        "c1ccccc1B(O)O",
+        "c1ccccc1Cl"
+      ],
+      "num_reactants": 2,
+      "reliability": 0.8,
+      "notes": "Selective Suzuki (Chloride)"
     },
     {
       "id": "hartenfeller_32",
@@ -349,21 +468,43 @@
       "class": "ring_closure",
       "product_class": "indole_piperidine",
       "smarts_forward": "[c;H1:3]1:[c:4]:[c:5]:[c;H1:6]:[c:7]2:[nH:8]:[c:9]:[c;H1:1]:[c:2]:1:2.O=[C:10]1[#6;H2:11][#6;H2:12][N:13][#6;H2:14][#6;H2:15]1>>[#6;H2:12]3[#6;H1:11]=[C:10]([c:1]1:[c:9]:[n:8]:[c:7]2:[c:6]:[c:5]:[c:4]:[c:3]:[c:2]:1:2)[#6;H2:15][#6;H2:14][N:13]3",
-      "reactant_smiles": ["c1cccc2c1C=CN2", "C1CC(=O)CCN1"],
+      "reactant_smiles": [
+        "c1cccc2c1C=CN2",
+        "C1CC(=O)CCN1"
+      ],
       "num_reactants": 2,
       "reliability": 0.65,
       "notes": ""
     },
     {
-      "id": "hartenfeller_33",
-      "name": "Negishi",
+      "id": "hartenfeller_33_i",
+      "name": "Negishi_I",
       "class": "coupling",
       "product_class": "C-C_bond",
-      "smarts_forward": "[#6;$([#6]~[#6]);!$([#6]~[S,N,O,P]):1][Cl,Br,I].[Cl,Br,I][#6;$([#6]~[#6]);!$([#6]~[S,N,O,P]):2]>>[#6:2][#6:1]",
-      "reactant_smiles": ["CCBr", "CCBr"],
+      "smarts_forward": "[#6;$([#6]~[#6]);!$([#6]~[S,N,O,P]):1][Cl,Br,I].[I][#6;$([#6]~[#6]);!$([#6]~[S,N,O,P]):2]>>[#6:2][#6:1]",
+      "num_reactants": 2,
+      "reliability": 0.8,
+      "notes": "Selective Negishi (Iodide)"
+    },
+    {
+      "id": "hartenfeller_33_br",
+      "name": "Negishi_Br",
+      "class": "coupling",
+      "product_class": "C-C_bond",
+      "smarts_forward": "[#6;$([#6]~[#6]);!$([#6]~[S,N,O,P]):1][Cl,Br,I].[Br][#6;$([#6]~[#6]);!$([#6]~[S,N,O,P]):2]>>[#6:2][#6:1]",
       "num_reactants": 2,
       "reliability": 0.75,
-      "notes": "Additional step: formation of Zn halide"
+      "notes": "Selective Negishi (Bromide)"
+    },
+    {
+      "id": "hartenfeller_33_cl",
+      "name": "Negishi_Cl",
+      "class": "coupling",
+      "product_class": "C-C_bond",
+      "smarts_forward": "[#6;$([#6]~[#6]);!$([#6]~[S,N,O,P]):1][Cl,Br,I].[Cl][#6;$([#6]~[#6]);!$([#6]~[S,N,O,P]):2]>>[#6:2][#6:1]",
+      "num_reactants": 2,
+      "reliability": 0.65,
+      "notes": "Selective Negishi (Chloride)"
     },
     {
       "id": "hartenfeller_34",
@@ -371,7 +512,10 @@
       "class": "substitution",
       "product_class": "imide",
       "smarts_forward": "[C;H1&$(C([#6])[#6]),H2&$(C[#6]):1][OH1].[NH1;$(N(C=O)C=O):2]>>[C:1][N:2]",
-      "reactant_smiles": ["CC(O)C", "CC(=O)NC(=O)C"],
+      "reactant_smiles": [
+        "CC(O)C",
+        "CC(=O)NC(=O)C"
+      ],
       "num_reactants": 2,
       "reliability": 0.85,
       "notes": "Inversion of stereochemistry at chiral centers"
@@ -382,7 +526,10 @@
       "class": "substitution",
       "product_class": "aryl_ether",
       "smarts_forward": "[C;H1&$(C([#6])[#6]),H2&$(C[#6]):1][OH1].[OH1;$(Oc1ccccc1):2]>>[C:1][O:2]",
-      "reactant_smiles": ["CC(O)C", "c1ccccc1O"],
+      "reactant_smiles": [
+        "CC(O)C",
+        "c1ccccc1O"
+      ],
       "num_reactants": 2,
       "reliability": 0.85,
       "notes": "Inversion of stereochemistry at chiral centers"
@@ -393,7 +540,10 @@
       "class": "substitution",
       "product_class": "sulfonamide",
       "smarts_forward": "[C;H1&$(C([#6])[#6]),H2&$(C[#6]):1][OH1].[NH1;$(N([#6])S(=O)=O):2]>>[C:1][N:2]",
-      "reactant_smiles": ["CC(O)C", "CNS(=O)(=O)C"],
+      "reactant_smiles": [
+        "CC(O)C",
+        "CNS(=O)(=O)C"
+      ],
       "num_reactants": 2,
       "reliability": 0.8,
       "notes": "Inversion of stereochemistry at chiral centers"
@@ -404,7 +554,10 @@
       "class": "substitution",
       "product_class": "tetrazole",
       "smarts_forward": "[C;H1&$(C([#6])[#6]),H2&$(C[#6]):1][OH1].[#7H1:2]1~[#7:3]~[#7:4]~[#7:5]~[#6:6]~1>>[C:1][#7:2]1:[#7:3]:[#7:4]:[#7:5]:[#6:6]:1",
-      "reactant_smiles": ["CC(O)C", "N1=NNC=N1"],
+      "reactant_smiles": [
+        "CC(O)C",
+        "N1=NNC=N1"
+      ],
       "num_reactants": 2,
       "reliability": 0.7,
       "notes": "Not regioselective"
@@ -415,7 +568,10 @@
       "class": "substitution",
       "product_class": "tetrazole",
       "smarts_forward": "[C;H1&$(C([#6])[#6]),H2&$(C[#6]):1][OH1].[#7H1:2]1~[#7:3]~[#7:4]~[#7:5]~[#6:6]~1>>[#7H0:2]1:[#7:3]:[#7H0:4]([C:1]):[#7:5]:[#6:6]:1",
-      "reactant_smiles": ["CC(O)C", "N1=NNC=N1"],
+      "reactant_smiles": [
+        "CC(O)C",
+        "N1=NNC=N1"
+      ],
       "num_reactants": 2,
       "reliability": 0.7,
       "notes": "Not regioselective"
@@ -426,7 +582,10 @@
       "class": "substitution",
       "product_class": "tetrazole",
       "smarts_forward": "[C;H1&$(C([#6])[#6]),H2&$(C[#6]):1][OH1].[#7:2]1~[#7:3]~[#7H1:4]~[#7:5]~[#6:6]~1>>[C:1][#7H0:2]1:[#7:3]:[#7H0:4]:[#7:5]:[#6:6]:1",
-      "reactant_smiles": ["CC(O)C", "N1N=NC=N1"],
+      "reactant_smiles": [
+        "CC(O)C",
+        "N1N=NC=N1"
+      ],
       "num_reactants": 2,
       "reliability": 0.7,
       "notes": "Not regioselective"
@@ -437,21 +596,43 @@
       "class": "substitution",
       "product_class": "tetrazole",
       "smarts_forward": "[C;H1&$(C([#6])[#6]),H2&$(C[#6]):1][OH1].[#7:2]1~[#7:3]~[#7H1:4]~[#7:5]~[#6:6]~1>>[#7:2]1:[#7:3]:[#7:4]([C:1]):[#7:5]:[#6:6]:1",
-      "reactant_smiles": ["CC(O)C", "N1N=NC=N1"],
+      "reactant_smiles": [
+        "CC(O)C",
+        "N1N=NC=N1"
+      ],
       "num_reactants": 2,
       "reliability": 0.7,
       "notes": "Not regioselective"
     },
     {
-      "id": "hartenfeller_41",
-      "name": "Heck_terminal_vinyl",
+      "id": "hartenfeller_41_i",
+      "name": "Heck_terminal_vinyl_I",
       "class": "coupling",
       "product_class": "alkene",
-      "smarts_forward": "[#6;c,$(C(=O)O),$(C#N):3][#6;H1:2]=[#6;H2:1].[#6;$([#6]=[#6]),$(c:c):4][Cl,Br,I]>>[#6:4]/[#6:1]=[#6:2]/[#6:3]",
-      "reactant_smiles": ["c1ccccc1C=C", "c1ccccc1Br"],
+      "smarts_forward": "[#6;c,$(C(=O)O),$(C#N):3][#6;H1:2]=[#6;H2:1].[#6;$([#6]=[#6]),$(c:c):4][I]>>[#6:4]/[#6:1]=[#6:2]/[#6:3]",
+      "num_reactants": 2,
+      "reliability": 0.85,
+      "notes": "Selective Heck (Iodide)"
+    },
+    {
+      "id": "hartenfeller_41_br",
+      "name": "Heck_terminal_vinyl_Br",
+      "class": "coupling",
+      "product_class": "alkene",
+      "smarts_forward": "[#6;c,$(C(=O)O),$(C#N):3][#6;H1:2]=[#6;H2:1].[#6;$([#6]=[#6]),$(c:c):4][Br]>>[#6:4]/[#6:1]=[#6:2]/[#6:3]",
       "num_reactants": 2,
       "reliability": 0.8,
-      "notes": "R1: aryl,COO,CN; R2: aryl, vinyl; X: Cl, Br, I"
+      "notes": "Selective Heck (Bromide)"
+    },
+    {
+      "id": "hartenfeller_41_cl",
+      "name": "Heck_terminal_vinyl_Cl",
+      "class": "coupling",
+      "product_class": "alkene",
+      "smarts_forward": "[#6;c,$(C(=O)O),$(C#N):3][#6;H1:2]=[#6;H2:1].[#6;$([#6]=[#6]),$(c:c):4][Cl]>>[#6:4]/[#6:1]=[#6:2]/[#6:3]",
+      "num_reactants": 2,
+      "reliability": 0.7,
+      "notes": "Selective Heck (Chloride)"
     },
     {
       "id": "hartenfeller_42",
@@ -459,21 +640,33 @@
       "class": "coupling",
       "product_class": "alkene",
       "smarts_forward": "[#6;c,$(C(=O)O),$(C#N):3][#6:2]([#6:5])=[#6;H1;$([#6][#6]):1].[#6;$([#6]=[#6]),$(c:c):4][Cl,Br,I]>>[#6:4][#6;H0:1]=[#6:2]([#6:5])[#6:3]",
-      "reactant_smiles": ["c1ccccc1C(C)=CC", "c1ccccc1Br"],
+      "reactant_smiles": [
+        "c1ccccc1C(C)=CC",
+        "c1ccccc1Br"
+      ],
       "num_reactants": 2,
       "reliability": 0.7,
       "notes": ""
     },
     {
-      "id": "hartenfeller_43",
-      "name": "Stille",
+      "id": "hartenfeller_43_i",
+      "name": "Stille_I",
       "class": "coupling",
       "product_class": "C-C_bond",
-      "smarts_forward": "[#6;$(C=C-[#6]),$(c:c):1][Br,I].[Cl,Br,I][c:2]>>[c:2][#6:1]",
-      "reactant_smiles": ["c1ccccc1Br", "c1ccccc1Br"],
+      "smarts_forward": "[#6;$(C=C-[#6]),$(c:c):1][Br,I].[I][c:2]>>[c:2][#6:1]",
+      "num_reactants": 2,
+      "reliability": 0.8,
+      "notes": "Selective Stille (Iodide)"
+    },
+    {
+      "id": "hartenfeller_43_br",
+      "name": "Stille_Br",
+      "class": "coupling",
+      "product_class": "C-C_bond",
+      "smarts_forward": "[#6;$(C=C-[#6]),$(c:c):1][Br,I].[Br][c:2]>>[c:2][#6:1]",
       "num_reactants": 2,
       "reliability": 0.75,
-      "notes": "Additional step: educt 1 → organotin (stannane)"
+      "notes": "Selective Stille (Bromide)"
     },
     {
       "id": "hartenfeller_44",
@@ -481,7 +674,10 @@
       "class": "coupling",
       "product_class": "ketone",
       "smarts_forward": "[#6:1][C:2]#[#7;D1].[Cl,Br,I][#6;$([#6]~[#6]);!$([#6]([Cl,Br,I])[Cl,Br,I]);!$([#6]=O):3]>>[#6:1][C:2](=O)[#6:3]",
-      "reactant_smiles": ["CC#N", "CCBr"],
+      "reactant_smiles": [
+        "CC#N",
+        "CCBr"
+      ],
       "num_reactants": 2,
       "reliability": 0.75,
       "notes": "Additional step: Grignard reagent formation"
@@ -492,21 +688,33 @@
       "class": "coupling",
       "product_class": "alcohol",
       "smarts_forward": "[#6:1][C;H1,$([C]([#6])[#6]):2]=[OD1:3].[Cl,Br,I][#6;$([#6]~[#6]);!$([#6]([Cl,Br,I])[Cl,Br,I]);!$([#6]=O):4]>>[C:1][#6:2]([OH1:3])[#6:4]",
-      "reactant_smiles": ["CC(=O)C", "CCBr"],
+      "reactant_smiles": [
+        "CC(=O)C",
+        "CCBr"
+      ],
       "num_reactants": 2,
       "reliability": 0.8,
       "notes": "Additional step: Grignard reagent formation"
     },
     {
-      "id": "hartenfeller_46",
-      "name": "Sonogashira",
+      "id": "hartenfeller_46_i",
+      "name": "Sonogashira_I",
       "class": "coupling",
       "product_class": "alkynyl",
-      "smarts_forward": "[#6;$(C=C-[#6]),$(c:c):1][Br,I].[CH1;$(C#CC):2]>>[#6:1][C:2]",
-      "reactant_smiles": ["c1cc(Br)ccc1", "CC#C"],
+      "smarts_forward": "[#6;$(C=C-[#6]),$(c:c):1][I].[CH1;$(C#CC):2]>>[#6:1][C:2]",
+      "num_reactants": 2,
+      "reliability": 0.9,
+      "notes": "Selective Sonogashira (Iodide)"
+    },
+    {
+      "id": "hartenfeller_46_br",
+      "name": "Sonogashira_Br",
+      "class": "coupling",
+      "product_class": "alkynyl",
+      "smarts_forward": "[#6;$(C=C-[#6]),$(c:c):1][Br].[CH1;$(C#CC):2]>>[#6:1][C:2]",
       "num_reactants": 2,
       "reliability": 0.85,
-      "notes": "R1: aryl, vinyl; X: Br, I"
+      "notes": "Selective Sonogashira (Bromide)"
     },
     {
       "id": "hartenfeller_47",
@@ -514,7 +722,10 @@
       "class": "coupling",
       "product_class": "amide",
       "smarts_forward": "[C;$(C=O):1][OH1].[N;$(N[#6]);!$(N=*);!$([N-]);!$(N#*);!$([ND3]);!$([ND4]);!$(N[O,N]);!$(N[C,S]=[S,O,N]):2]>>[C:1][N+0:2]",
-      "reactant_smiles": ["CC(=O)O", "NCC"],
+      "reactant_smiles": [
+        "CC(=O)O",
+        "NCC"
+      ],
       "num_reactants": 2,
       "reliability": 0.95,
       "notes": "Additional step: activation of carboxy group (COOH -> COCl)"
@@ -525,7 +736,10 @@
       "class": "coupling",
       "product_class": "sulfonamide",
       "smarts_forward": "[S;$(S(=O)(=O)[C,N]):1][Cl].[N;$(NC);!$(N=*);!$([N-]);!$(N#*);!$([ND3]);!$([ND4]);!$(N[c,O]);!$(N[C,S]=[S,O,N]):2]>>[S:1][N+0:2]",
-      "reactant_smiles": ["CS(=O)(=O)Cl", "NCC"],
+      "reactant_smiles": [
+        "CS(=O)(=O)Cl",
+        "NCC"
+      ],
       "num_reactants": 2,
       "reliability": 0.95,
       "notes": ""
@@ -536,7 +750,10 @@
       "class": "coupling",
       "product_class": "N-aryl_heterocycle",
       "smarts_forward": "[c:1]B(O)O.[nH1;+0;r5;!$(n[#6]=[O,S,N]);!$(n~n~n);!$(n~n~c~n);!$(n~c~n~n):2]>>[c:1][n:2]",
-      "reactant_smiles": ["c1ccccc1B(O)O", "N1C=NC=C1"],
+      "reactant_smiles": [
+        "c1ccccc1B(O)O",
+        "N1C=NC=C1"
+      ],
       "num_reactants": 2,
       "reliability": 0.75,
       "notes": "Chan-Lam coupling. Various 5-membered aromatic rings with NH."
@@ -547,21 +764,43 @@
       "class": "coupling",
       "product_class": "alkene",
       "smarts_forward": "[#6:3]-[C;H1,$([CH0](-[#6])[#6]);!$(CC=O):1]=[OD1].[Cl,Br,I][C;H2;$(C-[#6]);!$(CC[I,Br]);!$(CCO[CH3]):2]>>[C:3][C:1]=[C:2]",
-      "reactant_smiles": ["CC(=O)C", "BrCC"],
+      "reactant_smiles": [
+        "CC(=O)C",
+        "BrCC"
+      ],
       "num_reactants": 2,
       "reliability": 0.75,
       "notes": "Not stereoselective: E/Z isomers. Additional step: ylide formation."
     },
     {
-      "id": "hartenfeller_51",
-      "name": "Buchwald_Hartwig",
+      "id": "hartenfeller_51_i",
+      "name": "Buchwald_Hartwig_I",
       "class": "coupling",
       "product_class": "aryl_amine",
-      "smarts_forward": "[Cl,Br,I][c;$(c1:[c,n]:[c,n]:[c,n]:[c,n]:[c,n]:1):1].[N;$(NC)&!$(N=*)&!$([N-])&!$(N#*)&!$([ND3])&!$([ND4])&!$(N[c,O])&!$(N[C,S]=[S,O,N]),H2&$(Nc1:[c,n]:[c,n]:[c,n]:[c,n]:[c,n]:1):2]>>[c:1][N:2]",
-      "reactant_smiles": ["c1ccccc1Br", "CNC"],
+      "smarts_forward": "[I][c;$(c1:[c,n]:[c,n]:[c,n]:[c,n]:[c,n]:1):1].[N;$(NC)&!$(N=*)&!$([N-])&!$(N#*)&!$([ND3])&!$([ND4])&!$(N[c,O])&!$(N[C,S]=[S,O,N]),H2&$(Nc1:[c,n]:[c,n]:[c,n]:[c,n]:[c,n]:1):2]>>[c:1][N:2]",
+      "num_reactants": 2,
+      "reliability": 0.9,
+      "notes": "Selective Buchwald (Iodide)"
+    },
+    {
+      "id": "hartenfeller_51_br",
+      "name": "Buchwald_Hartwig_Br",
+      "class": "coupling",
+      "product_class": "aryl_amine",
+      "smarts_forward": "[Br][c;$(c1:[c,n]:[c,n]:[c,n]:[c,n]:[c,n]:1):1].[N;$(NC)&!$(N=*)&!$([N-])&!$(N#*)&!$([ND3])&!$([ND4])&!$(N[c,O])&!$(N[C,S]=[S,O,N]),H2&$(Nc1:[c,n]:[c,n]:[c,n]:[c,n]:[c,n]:1):2]>>[c:1][N:2]",
       "num_reactants": 2,
       "reliability": 0.85,
-      "notes": "X: Cl, Br, I"
+      "notes": "Selective Buchwald (Bromide)"
+    },
+    {
+      "id": "hartenfeller_51_cl",
+      "name": "Buchwald_Hartwig_Cl",
+      "class": "coupling",
+      "product_class": "aryl_amine",
+      "smarts_forward": "[Cl][c;$(c1:[c,n]:[c,n]:[c,n]:[c,n]:[c,n]:1):1].[N;$(NC)&!$(N=*)&!$([N-])&!$(N#*)&!$([ND3])&!$([ND4])&!$(N[c,O])&!$(N[C,S]=[S,O,N]),H2&$(Nc1:[c,n]:[c,n]:[c,n]:[c,n]:[c,n]:1):2]>>[c:1][N:2]",
+      "num_reactants": 2,
+      "reliability": 0.75,
+      "notes": "Selective Buchwald (Chloride)"
     },
     {
       "id": "hartenfeller_52",
@@ -569,21 +808,43 @@
       "class": "ring_closure",
       "product_class": "imidazole",
       "smarts_forward": "[C;$(C([#6])[#6;!$([#6]Br)]):4](=[OD1])[CH;$(C([#6])[#6]):5]Br.[#7;H2:3][C;$(C(=N)(N)[c,#7]):2]=[#7;H1;D1:1]>>[C:4]1=[CH0:5][NH:3][C:2]=[N:1]1",
-      "reactant_smiles": ["CC(=O)C(Br)C", "N=C(N)NC"],
+      "reactant_smiles": [
+        "CC(=O)C(Br)C",
+        "N=C(N)NC"
+      ],
       "num_reactants": 2,
       "reliability": 0.75,
       "notes": ""
     },
     {
-      "id": "hartenfeller_53",
-      "name": "decarboxylative_coupling",
+      "id": "hartenfeller_53_i",
+      "name": "decarboxylative_coupling_I",
       "class": "coupling",
       "product_class": "biaryl",
-      "smarts_forward": "[c;$(c1[c;$(c[C,S,N](=[OD1])[*;R0;!OH1])]cccc1):1][C;$(C(=O)[O;H1])].[c;$(c1aaccc1):2][Cl,Br,I]>>[c:1][c:2]",
-      "reactant_smiles": ["c1c(C(=O)O)c([N+](=O)[O-])ccc1", "c1ccccc1Br"],
+      "smarts_forward": "[c;$(c1[c;$(c[C,S,N](=[OD1])[*;R0;!OH1])]cccc1):1][C;$(C(=O)[O;H1])].[c;$(c1aaccc1):2][I]>>[c:1][c:2]",
+      "num_reactants": 2,
+      "reliability": 0.7,
+      "notes": "Selective decarboxylative (Iodide)"
+    },
+    {
+      "id": "hartenfeller_53_br",
+      "name": "decarboxylative_coupling_Br",
+      "class": "coupling",
+      "product_class": "biaryl",
+      "smarts_forward": "[c;$(c1[c;$(c[C,S,N](=[OD1])[*;R0;!OH1])]cccc1):1][C;$(C(=O)[O;H1])].[c;$(c1aaccc1):2][Br]>>[c:1][c:2]",
       "num_reactants": 2,
       "reliability": 0.65,
-      "notes": "X: Cl, Br, I"
+      "notes": "Selective decarboxylative (Bromide)"
+    },
+    {
+      "id": "hartenfeller_53_cl",
+      "name": "decarboxylative_coupling_Cl",
+      "class": "coupling",
+      "product_class": "biaryl",
+      "smarts_forward": "[c;$(c1[c;$(c[C,S,N](=[OD1])[*;R0;!OH1])]cccc1):1][C;$(C(=O)[O;H1])].[c;$(c1aaccc1):2][Cl]>>[c:1][c:2]",
+      "num_reactants": 2,
+      "reliability": 0.55,
+      "notes": "Selective decarboxylative (Chloride)"
     },
     {
       "id": "hartenfeller_54",
@@ -591,7 +852,10 @@
       "class": "substitution",
       "product_class": "aryl_amine",
       "smarts_forward": "[c;!$(c1ccccc1);$(c1[n,c]c[n,c]c[n,c]1):1][Cl,F].[N;$(NC);!$(N=*);!$([N-]);!$(N#*);!$([ND3]);!$([ND4]);!$(N[c,O]);!$(N[C,S]=[S,O,N]):2]>>[c:1][N:2]",
-      "reactant_smiles": ["c1cnc(F)cc1", "CN"],
+      "reactant_smiles": [
+        "c1cnc(F)cc1",
+        "CN"
+      ],
       "num_reactants": 2,
       "reliability": 0.85,
       "notes": "SNAr on pyridine, pyrimidine, triazine"
@@ -602,7 +866,10 @@
       "class": "substitution",
       "product_class": "aryl_amine",
       "smarts_forward": "[c;$(c1c(N(~O)~O)cccc1):1][Cl,F].[N;$(NC);!$(N=*);!$([N-]);!$(N#*);!$([ND3]);!$([ND4]);!$(N[c,O]);!$(N[C,S]=[S,O,N]):2]>>[c:1][N:2]",
-      "reactant_smiles": ["c1c([N+](=O)[O-])c(F)ccc1", "CN"],
+      "reactant_smiles": [
+        "c1c([N+](=O)[O-])c(F)ccc1",
+        "CN"
+      ],
       "num_reactants": 2,
       "reliability": 0.85,
       "notes": "Ortho nitro activates SNAr"
@@ -613,7 +880,10 @@
       "class": "substitution",
       "product_class": "aryl_amine",
       "smarts_forward": "[c;$(c1ccc(N(~O)~O)cc1):1][Cl,F].[N;$(NC);!$(N=*);!$([N-]);!$(N#*);!$([ND3]);!$([ND4]);!$(N[c,O]);!$(N[C,S]=[S,O,N]):2]>>[c:1][N:2]",
-      "reactant_smiles": ["c1c(F)ccc([N+](=O)[O-])c1", "CN"],
+      "reactant_smiles": [
+        "c1c(F)ccc([N+](=O)[O-])c1",
+        "CN"
+      ],
       "num_reactants": 2,
       "reliability": 0.85,
       "notes": "Para nitro activates SNAr"
@@ -624,7 +894,10 @@
       "class": "coupling",
       "product_class": "urea",
       "smarts_forward": "[N;$(N-[#6]):3]=[C;$(C=O):1].[N;$(N[#6]);!$(N=*);!$([N-]);!$(N#*);!$([ND3]);!$([ND4]);!$(N[O,N]);!$(N[C,S]=[S,O,N]):2]>>[N:3]-[C:1]-[N+0:2]",
-      "reactant_smiles": ["CN=C=O", "CN"],
+      "reactant_smiles": [
+        "CN=C=O",
+        "CN"
+      ],
       "num_reactants": 2,
       "reliability": 0.9,
       "notes": ""
@@ -635,7 +908,10 @@
       "class": "coupling",
       "product_class": "thiourea",
       "smarts_forward": "[N;$(N-[#6]):3]=[C;$(C=S):1].[N;$(N[#6]);!$(N=*);!$([N-]);!$(N#*);!$([ND3]);!$([ND4]);!$(N[O,N]);!$(N[C,S]=[S,O,N]):2]>>[N:3]-[C:1]-[N+0:2]",
-      "reactant_smiles": ["CN=C=S", "CN"],
+      "reactant_smiles": [
+        "CN=C=S",
+        "CN"
+      ],
       "num_reactants": 2,
       "reliability": 0.85,
       "notes": ""

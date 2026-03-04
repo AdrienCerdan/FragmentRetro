@@ -185,16 +185,21 @@
     }
   ],
   "fg_incompatibility": {
-    "pd_catalyzed": {
-      "description": "Pd(0)/Pd(II) catalytic cycle is poisoned by strong sigma-donors and competing nucleophilic coupling partners",
+    "pd_catalyzed_i": {
+      "description": "Pd-catalyzed coupling at Iodide (highest reactivity). No halogen priority exclusions.",
       "reaction_ids": [
-        "hartenfeller_31",
-        "hartenfeller_33",
-        "hartenfeller_41",
-        "hartenfeller_42",
-        "hartenfeller_43",
-        "hartenfeller_46",
-        "hartenfeller_51"
+        "hartenfeller_31_i",
+        "hartenfeller_33_i",
+        "hartenfeller_41_i",
+        "hartenfeller_43_i",
+        "hartenfeller_46_i",
+        "hartenfeller_51_i",
+        "hartenfeller_53_i",
+        "explore_rxn102_i",
+        "explore_rxn108_i",
+        "explore_rxn110_i",
+        "explore_rxn111_i",
+        "explore_rxn317_i"
       ],
       "exclusions_on_any_bb": [
         {
@@ -202,34 +207,113 @@
           "reason": "Pd catalyst poisoning by free thiol (Roughley & Jordan 2011)"
         },
         {
-          "smarts": "[#16X2H1]",
-          "reason": "Pd catalyst poisoning by thiol (alt pattern)"
-        },
-        {
           "smarts": "[NX3]=[NX2]",
-          "reason": "Azo groups poison Pd catalyst (BH amination lit)"
+          "reason": "Azo groups poison Pd catalyst"
         },
         {
           "smarts": "[PX3]",
           "reason": "Free phosphine competes with ligand for Pd coordination"
         },
         {
-          "smarts": "[CX3](=[OX1])[F,Cl,Br,I]",
-          "reason": "Acyl halide reacts with Pd intermediates"
+          "smarts": "[#6;a]-[Br,I].[#6;a]-[B](O)O",
+          "reason": "Bifunctional ArBr/ArI + ArB(OH)2 self-polymerizes"
         },
         {
-          "smarts": "[NX2]=[CX2]=[OX1]",
-          "reason": "Isocyanate reacts with Pd-amido intermediates"
+          "smarts": "[c]-[I].[c]-[I]",
+          "reason": "Ambiguous regioselectivity: two or more aromatic iodides on same molecule"
+        },
+        {
+          "smarts": "[c]-[Br].[c]-[Br]",
+          "reason": "Ambiguous regioselectivity: two or more aromatic bromides on same molecule"
+        },
+        {
+          "smarts": "[c]-[Cl].[c]-[Cl]",
+          "reason": "Ambiguous regioselectivity: two or more aromatic chlorides on same molecule"
+        }
+      ],
+      "exclusions_on_halide_bb": []
+    },
+    "pd_catalyzed_br": {
+      "description": "Pd-catalyzed coupling at Bromide. Blocked if Iodide is present.",
+      "reaction_ids": [
+        "hartenfeller_31_br",
+        "hartenfeller_33_br",
+        "hartenfeller_41_br",
+        "hartenfeller_43_br",
+        "hartenfeller_46_br",
+        "hartenfeller_51_br",
+        "hartenfeller_53_br",
+        "explore_rxn102_br",
+        "explore_rxn108_br",
+        "explore_rxn110_br",
+        "explore_rxn111_br",
+        "explore_rxn317_br",
+        "aizf_rxn001"
+      ],
+      "exclusions_on_any_bb": [
+        {
+          "smarts": "[SX2H]",
+          "reason": "Pd catalyst poisoning by free thiol"
+        },
+        {
+          "smarts": "[#6;a]-[Br,I].[#6;a]-[B](O)O",
+          "reason": "Bifunctional ArBr/ArI + ArB(OH)2 self-polymerizes"
+        },
+        {
+          "smarts": "[c]-[I].[c]-[I]",
+          "reason": "Ambiguous regioselectivity: two or more aromatic iodides on same molecule"
+        },
+        {
+          "smarts": "[c]-[Br].[c]-[Br]",
+          "reason": "Ambiguous regioselectivity: two or more aromatic bromides on same molecule"
+        },
+        {
+          "smarts": "[c]-[Cl].[c]-[Cl]",
+          "reason": "Ambiguous regioselectivity: two or more aromatic chlorides on same molecule"
         }
       ],
       "exclusions_on_halide_bb": [
         {
-          "smarts": "[NH2;$([NH2]c)]",
-          "reason": "Free aryl amine on halide BB causes competing Buchwald side-reaction"
+          "smarts": "[I]",
+          "reason": "Selective Reactivity: Pd-coupling priority I > Br. Iodide must be reacted first."
+        }
+      ]
+    },
+    "pd_catalyzed_cl": {
+      "description": "Pd-catalyzed coupling at Chloride. Blocked if Bromide or Iodide is present.",
+      "reaction_ids": [
+        "hartenfeller_31_cl",
+        "hartenfeller_33_cl",
+        "hartenfeller_41_cl",
+        "hartenfeller_51_cl",
+        "hartenfeller_53_cl"
+      ],
+      "exclusions_on_any_bb": [
+        {
+          "smarts": "[SX2H]",
+          "reason": "Pd catalyst poisoning by free thiol"
         },
         {
-          "smarts": "[OH;$([OH]c)]",
-          "reason": "Free aryl hydroxyl on halide BB causes competing O-arylation"
+          "smarts": "[#6;a]-[Br,I].[#6;a]-[B](O)O",
+          "reason": "Bifunctional ArBr/ArI + ArB(OH)2 self-polymerizes"
+        },
+        {
+          "smarts": "[c]-[I].[c]-[I]",
+          "reason": "Ambiguous regioselectivity: two or more aromatic iodides on same molecule"
+        },
+        {
+          "smarts": "[c]-[Br].[c]-[Br]",
+          "reason": "Ambiguous regioselectivity: two or more aromatic bromides on same molecule"
+        },
+        {
+          "smarts": "[c]-[Cl].[c]-[Cl]",
+          "reason": "Ambiguous regioselectivity: two or more aromatic chlorides on same molecule"
+        }
+      ],
+      "exclusions_on_halide_bb": [
+        {
+          "smarts": "[Br,I]",
+          "reason": "Selective Reactivity: Pd-coupling priority I > Br > Cl. Bromide or Iodide must be reacted first."
         }
       ]
     },
