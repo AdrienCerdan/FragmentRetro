@@ -60,6 +60,7 @@ _worker_max_depth = None
 _worker_max_depth = None
 _worker_max_nodes = None
 _worker_reference_routes = None
+_worker_strict = False
 
 def extract_reference_leaves(node):
     if node.get("type") == "mol" and node.get("in_stock", False):
@@ -219,10 +220,10 @@ def get_retro_node_leaf_sets(node):
     return leaf_sets
 
 
-def _init_worker(mol_props_path, fp_size, tiers, timeout, max_depth, max_nodes, reference_routes=None):
+def _init_worker(mol_props_path, fp_size, tiers, timeout, max_depth, max_nodes, reference_routes=None, strict=False):
     """Initialize per-worker globals (called once per pool process)."""
     global _worker_cf, _worker_lib, _worker_tiers
-    global _worker_timeout, _worker_max_depth, _worker_max_nodes, _worker_reference_routes
+    global _worker_timeout, _worker_max_depth, _worker_max_nodes, _worker_reference_routes, _worker_strict
     _worker_cf = load_compound_filter(mol_props_path, fpSize=fp_size)
     _worker_lib = ReactionLibrary.default() if any(t in tiers for t in ["2", "3"]) else None
     _worker_tiers = tiers
@@ -230,6 +231,7 @@ def _init_worker(mol_props_path, fp_size, tiers, timeout, max_depth, max_nodes, 
     _worker_max_depth = max_depth
     _worker_max_nodes = max_nodes
     _worker_reference_routes = reference_routes
+    _worker_strict = strict
 
 
 # ---------------------------------------------------------------------------
@@ -237,17 +239,21 @@ def _init_worker(mol_props_path, fp_size, tiers, timeout, max_depth, max_nodes, 
 # ---------------------------------------------------------------------------
 
 
-def run_tier3(smiles, cf, lib, timeout, max_depth=5, max_nodes=2000):
+def run_tier3(smiles, cf, lib, timeout, max_depth=5, max_nodes=2000, strict=False):
     t0 = time.time()
     try:
         from fragmentretro.smarts_retro import SmartsRetrosynthesis
+        from fragmentretro.synthesis_filters import SynthesisFilters
+
+        filters = SynthesisFilters() if strict else None
 
         retro = SmartsRetrosynthesis(
             lib, 
             max_depth=max_depth, 
             max_nodes=max_nodes,
             min_bb_heavy_atoms=getattr(cf, "min_heavy_atoms", 0),
-            max_bb_heavy_atoms=getattr(cf, "max_heavy_atoms", 100)
+            max_bb_heavy_atoms=getattr(cf, "max_heavy_atoms", 100),
+            synthesis_filters=filters
         )
 
         def is_purchasable(smi):
@@ -485,7 +491,7 @@ def _process_molecule(task):
 
     # --- T3: separate engine (SMARTS retrosynthesis) ---
     if "3" in tiers:
-        t3_res = run_tier3(canonical, cf, lib, timeout, max_depth, max_nodes)
+        t3_res = run_tier3(canonical, cf, lib, timeout, max_depth, max_nodes, strict=_worker_strict)
         ref_leaves = ref_routes.get(canonical) if ref_routes else None
         if ref_leaves is not None and "predicted_leaves" in t3_res:
              pred_set = set(t3_res["predicted_leaves"])
@@ -500,13 +506,13 @@ def _process_molecule(task):
 # ---------------------------------------------------------------------------
 
 def run_benchmark(targets, config, tiers, timeout=120.0,
-                  max_depth=5, max_nodes=2000, n_workers=1, reference_routes=None):
+                  max_depth=5, max_nodes=2000, n_workers=1, reference_routes=None, strict=False):
     mol_props_path = config["fragmentretro_stock"]
     fp_size = config.get("fp_size", 2048)
 
     if n_workers > 1:
         return _run_benchmark_parallel(targets, config, tiers, timeout,
-                                        max_depth, max_nodes, n_workers, reference_routes)
+                                        max_depth, max_nodes, n_workers, reference_routes, strict)
 
     # --- Serial mode ---
     print(f"Loading CompoundFilter from {mol_props_path} ...")
@@ -521,7 +527,7 @@ def run_benchmark(targets, config, tiers, timeout=120.0,
 
     # Set globals for _process_molecule
     global _worker_cf, _worker_lib, _worker_tiers
-    global _worker_timeout, _worker_max_depth, _worker_max_nodes, _worker_reference_routes
+    global _worker_timeout, _worker_max_depth, _worker_max_nodes, _worker_reference_routes, _worker_strict
     _worker_cf = cf
     _worker_lib = lib
     _worker_tiers = tiers
@@ -529,6 +535,7 @@ def run_benchmark(targets, config, tiers, timeout=120.0,
     _worker_max_depth = max_depth
     _worker_max_nodes = max_nodes
     _worker_reference_routes = reference_routes
+    _worker_strict = strict
 
     results = []
     n_total = len(targets)
@@ -557,7 +564,7 @@ def run_benchmark(targets, config, tiers, timeout=120.0,
 
 
 def _run_benchmark_parallel(targets, config, tiers, timeout,
-                            max_depth, max_nodes, n_workers, reference_routes=None):
+                             max_depth, max_nodes, n_workers, reference_routes=None, strict=False):
     """Run benchmark using multiprocessing pool."""
     import multiprocessing as mp
 
@@ -573,7 +580,7 @@ def _run_benchmark_parallel(targets, config, tiers, timeout,
     with mp.Pool(
         processes=n_workers,
         initializer=_init_worker,
-        initargs=(mol_props_path, fp_size, tiers, timeout, max_depth, max_nodes, reference_routes),
+        initargs=(mol_props_path, fp_size, tiers, timeout, max_depth, max_nodes, reference_routes, strict),
     ) as pool:
         results_unordered = []
         for mol_result in pool.imap_unordered(_process_molecule, tasks, chunksize=4):
@@ -701,6 +708,8 @@ def main():
                         help="Number of parallel workers (default: 1 = serial). "
                              "Each worker loads its own CompoundFilter and "
                              "ReactionLibrary. Use -j 0 for auto (all CPUs).")
+    parser.add_argument("--strict", action="store_true",
+                        help="Enable strict synthesis-oriented filters (Lilly, FG, Sterics)")
     args = parser.parse_args()
 
     with open(args.config) as f:
@@ -741,7 +750,8 @@ def main():
                             max_depth=args.max_depth,
                             max_nodes=args.max_nodes,
                             n_workers=n_workers,
-                            reference_routes=reference_routes)
+                            reference_routes=reference_routes,
+                            strict=args.strict)
     total_time = time.time() - t_start
 
     summary = compute_summary(results)

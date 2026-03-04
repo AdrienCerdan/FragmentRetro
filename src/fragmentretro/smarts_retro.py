@@ -26,6 +26,8 @@ from rdkit import Chem
 from fragmentretro.constraints import ConstraintConfig
 from fragmentretro.reaction_library import Reaction, ReactionLibrary
 from fragmentretro.utils.logging_config import logger
+from fragmentretro.synthesis_filters import SynthesisFilters
+
 
 
 @dataclass
@@ -151,6 +153,7 @@ class SmartsRetrosynthesis:
         constraints: ConstraintConfig | None = None,
         min_bb_heavy_atoms: int = 0,
         max_bb_heavy_atoms: int = 100,
+        synthesis_filters: SynthesisFilters | None = None,
     ):
         self.library = library
         self.max_depth = max_depth
@@ -158,6 +161,7 @@ class SmartsRetrosynthesis:
         self.constraints = constraints
         self.min_bb_heavy_atoms = min_bb_heavy_atoms
         self.max_bb_heavy_atoms = max_bb_heavy_atoms
+        self.synthesis_filters = synthesis_filters
         self._nodes_explored = 0
 
         # Apply constraints to library if provided
@@ -284,7 +288,13 @@ class SmartsRetrosynthesis:
             return [RetroSynthNode(smiles=smiles, depth=depth)]
 
         n_heavy = mol.GetNumHeavyAtoms()
+
+        # Strict: Lilly instability check on parent
+        if self.synthesis_filters and not self.synthesis_filters.passes_instability_filter(mol):
+            return [RetroSynthNode(smiles=smiles, depth=depth)]
+
         remaining_steps = self.max_depth - depth
+
         # Heuristic: each step can at most reduce size by ~50% or remove ~20 atoms
         if n_heavy > self.max_bb_heavy_atoms + (remaining_steps * 20):
             is_bb = self._check_purchasable(smiles, is_purchasable) if is_purchasable else False
@@ -316,6 +326,24 @@ class SmartsRetrosynthesis:
             for reactants in reactant_sets:
                 if self._nodes_explored > self.max_nodes:
                     break
+
+                # Strict: FG Incompatibility & Steric Hindrance
+                if self.synthesis_filters:
+                    r_mols = [Chem.MolFromSmiles(r) for r in reactants]
+                    if not self.synthesis_filters.are_reactants_compatible(rxn.id, r_mols):
+                        continue
+                    
+                    # Strict: Regioisomer rejection (Enamine REAL style)
+                    # Implementation detail: if apply_reverse returns multiple reactant sets
+                    # for the SAME reaction at the SAME site, it often implies multiple
+                    # possible disconnections or poor selectivity.
+                    # Simplified: if we get multiple reactant sets, we'll keep them 
+                    # for now unless user asks for harder symmetry rejection.
+                    # HOWEVER, we should check if products are stable.
+                    if any(not self.synthesis_filters.passes_instability_filter(rm) for rm in r_mols if rm):
+                        continue
+                    if any(not self.synthesis_filters.passes_caps(rm, step=depth+1) for rm in r_mols if rm):
+                        continue
 
                 # Check LLS constraint early
                 if self.constraints and self.constraints.max_lls is not None:

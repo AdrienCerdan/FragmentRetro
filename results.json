@@ -1,0 +1,191 @@
+{
+  "summary": {
+    "n_total": 1,
+    "n_valid": 1,
+    "n_solved": 1,
+    "solve_rate": 1.0,
+    "mean_score": 0.644,
+    "median_score": 0.644,
+    "mean_time_s": 0.3299,
+    "total_time_s": 0.33,
+    "solved_metrics": {
+      "mean_steps": 7.0,
+      "mean_lls": 5.0,
+      "mean_bbs": 8.0,
+      "mean_reliability": 0.8714
+    },
+    "total_wall_time_s": 1.05,
+    "settings": {
+      "strict": true,
+      "max_depth": 5,
+      "max_nodes": 2000,
+      "max_routes": 5,
+      "workers": 1
+    }
+  },
+  "results": [
+    {
+      "smiles": "COC(=O)Cc1ccc(C#Cc2cc(C(C)(C)C)c(OC(C)C)c(CBr)c2C)cc1",
+      "solved": true,
+      "score": 0.644048,
+      "n_routes": 1,
+      "best_route": {
+        "solved": true,
+        "steps": 7,
+        "lls": 5,
+        "n_bbs": 8,
+        "avg_reliability": 0.8714
+      },
+      "routes": [
+        {
+          "solved": true,
+          "steps": 7,
+          "lls": 5,
+          "n_bbs": 8,
+          "avg_reliability": 0.8714,
+          "reaction": "Suzuki",
+          "tree": {
+            "smiles": "COC(=O)Cc1ccc(C#Cc2cc(C(C)(C)C)c(OC(C)C)c(CBr)c2C)cc1",
+            "depth": 0,
+            "is_building_block": false,
+            "reaction": {
+              "id": "hartenfeller_31",
+              "name": "Suzuki",
+              "class": "coupling",
+              "reliability": 0.9
+            },
+            "children": [
+              {
+                "smiles": "COC(=O)B(O)O",
+                "depth": 1,
+                "is_building_block": false,
+                "reaction": {
+                  "id": "explore_rxn205",
+                  "name": "Mitsunobu_phenyl_ether",
+                  "class": "substitution",
+                  "reliability": 0.85
+                },
+                "children": [
+                  {
+                    "smiles": "CO",
+                    "depth": 2,
+                    "is_building_block": true
+                  },
+                  {
+                    "smiles": "O=C(O)B(O)O",
+                    "depth": 2,
+                    "is_building_block": false,
+                    "reaction": {
+                      "id": "explore_rxn203",
+                      "name": "urea_substitution",
+                      "class": "substitution",
+                      "reliability": 0.8
+                    },
+                    "children": [
+                      {
+                        "smiles": "N",
+                        "depth": 3,
+                        "is_building_block": true
+                      },
+                      {
+                        "smiles": "ONO",
+                        "depth": 3,
+                        "is_building_block": true
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "smiles": "[CH]c1ccc(C#Cc2cc(C(C)(C)C)c(OC(C)C)c(CBr)c2C)cc1",
+                "depth": 1,
+                "is_building_block": false,
+                "reaction": {
+                  "id": "hartenfeller_31",
+                  "name": "Suzuki",
+                  "class": "coupling",
+                  "reliability": 0.9
+                },
+                "children": [
+                  {
+                    "smiles": "[C]B(O)O",
+                    "depth": 2,
+                    "is_building_block": true
+                  },
+                  {
+                    "smiles": "Cc1c(C#Cc2ccccc2)cc(C(C)(C)C)c(OC(C)C)c1CBr",
+                    "depth": 2,
+                    "is_building_block": false,
+                    "reaction": {
+                      "id": "hartenfeller_31",
+                      "name": "Suzuki",
+                      "class": "coupling",
+                      "reliability": 0.9
+                    },
+                    "children": [
+                      {
+                        "smiles": "[C]B(O)O",
+                        "depth": 3,
+                        "is_building_block": true
+                      },
+                      {
+                        "smiles": "CC(C)Oc1c(CBr)cc(C#Cc2ccccc2)cc1C(C)(C)C",
+                        "depth": 3,
+                        "is_building_block": false,
+                        "reaction": {
+                          "id": "hartenfeller_31",
+                          "name": "Suzuki",
+                          "class": "coupling",
+                          "reliability": 0.9
+                        },
+                        "children": [
+                          {
+                            "smiles": "[C]B(O)O",
+                            "depth": 4,
+                            "is_building_block": true
+                          },
+                          {
+                            "smiles": "C[CH]Oc1c(CBr)cc(C#Cc2ccccc2)cc1C(C)(C)C",
+                            "depth": 4,
+                            "is_building_block": false,
+                            "reaction": {
+                              "id": "hartenfeller_46",
+                              "name": "Sonogashira",
+                              "class": "coupling",
+                              "reliability": 0.85
+                            },
+                            "children": [
+                              {
+                                "smiles": "C[CH]Oc1ccc(C#Cc2ccccc2)cc1C(C)(C)C",
+                                "depth": 5,
+                                "is_building_block": true
+                              },
+                              {
+                                "smiles": "[CH]Br",
+                                "depth": 5,
+                                "is_building_block": true
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "metrics": {
+              "total_steps": 7,
+              "longest_linear_sequence": 5,
+              "num_building_blocks": 8,
+              "avg_reliability": 0.871,
+              "solved": true
+            }
+          }
+        }
+      ],
+      "time_s": 0.3299,
+      "idx": 0
+    }
+  ]
+}
