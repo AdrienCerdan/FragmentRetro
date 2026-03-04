@@ -1,0 +1,427 @@
+{
+  "description": "Synthesis-oriented filters for chemical space estimation (strict v2)",
+  "sources": [
+    "Bruns & Watson, J. Med. Chem. 2012, 55, 9763 — Lilly MedChem Rules (reactivity/instability subset)",
+    "IanAWatson/Lilly-Medchem-Rules GitHub — queries/reject1 (80 rejection queries, custom QRY format)",
+    "Hartenfeller et al., J. Chem. Inf. Model. 2011, 51, 3093 — 58 HTE reactions",
+    "Grygorenko et al., iScience 2020, 23(11), 101681 — Enamine REAL methodology",
+    "Roughley & Jordan, J. Med. Chem. 2011, 54, 3451 — Medicinal chemistry reaction survey",
+    "Clayden, Greeves, Warren — Organic Chemistry, 2nd ed. — FG incompatibility textbook"
+  ],
+  "lilly_instability_smarts": [
+    {
+      "name": "acyl_halide",
+      "smarts": "[CX3](=[OX1])[F,Cl,Br,I]",
+      "reason": "Hydrolysis during aqueous workup",
+      "lilly_query": "N/A (hard reject)"
+    },
+    {
+      "name": "acid_anhydride",
+      "smarts": "[CX3](=[OX1])[OX2][CX3](=[OX1])",
+      "reason": "Hydrolytically unstable",
+      "lilly_query": "N/A"
+    },
+    {
+      "name": "peroxide",
+      "smarts": "[OX2][OX2]",
+      "reason": "Unstable to storage/handling, direct oxidant",
+      "lilly_query": "peroxide.qry"
+    },
+    {
+      "name": "aldehyde",
+      "smarts": "[CH1,CH0;D2](=O)",
+      "reason": "Reactive electrophile, forms Schiff bases with amines in vivo and during purification",
+      "lilly_query": "aldehyde.qry"
+    },
+    {
+      "name": "michael_acceptor",
+      "smarts": "[CX3](=[OX1])[CX3]=[CX3]",
+      "reason": "Reactive with biological nucleophiles, self-polymerization",
+      "lilly_query": "michael_rejected.qry"
+    },
+    {
+      "name": "sulfonyl_halide",
+      "smarts": "[SX4](=[OX1])(=[OX1])[F,Cl,Br,I]",
+      "reason": "Reactive during purification",
+      "lilly_query": "N/A"
+    },
+    {
+      "name": "azo_compound",
+      "smarts": "[#6][NX2]=[NX2][#6]",
+      "reason": "Photolytic instability",
+      "lilly_query": "N/A"
+    },
+    {
+      "name": "hemiacetal",
+      "smarts": "[CX4]([OH])([OX2])",
+      "reason": "Latent aldehyde, hydrolyzes under mild conditions",
+      "lilly_query": "N/A"
+    },
+    {
+      "name": "acetal_acyclic",
+      "smarts": "[CH1]([OX2])([OX2])[#6]",
+      "reason": "Acid-labile, hydrolyzes to aldehyde",
+      "lilly_query": "acetal_acyclic.qry"
+    },
+    {
+      "name": "isocyanate",
+      "smarts": "[NX2]=[CX2]=[OX1]",
+      "reason": "Moisture-reactive",
+      "lilly_query": "N/A"
+    },
+    {
+      "name": "isothiocyanate",
+      "smarts": "[NX2]=[CX2]=[SX1]",
+      "reason": "Moisture-reactive",
+      "lilly_query": "N/A"
+    },
+    {
+      "name": "acyl_azide",
+      "smarts": "[CX3](=[OX1])N=[N]=[N]",
+      "reason": "Curtius rearrangement / potentially explosive",
+      "lilly_query": "N/A"
+    },
+    {
+      "name": "epoxide",
+      "smarts": "[OX2r3]1[#6r3][#6r3]1",
+      "reason": "Electrophilic ring-opening under trace acid/base",
+      "lilly_query": "het_3mem_ring.qry"
+    },
+    {
+      "name": "aziridine",
+      "smarts": "[NX3r3]1[#6r3][#6r3]1",
+      "reason": "Strained ring, electrophilic ring-opening",
+      "lilly_query": "het_3mem_ring.qry"
+    },
+    {
+      "name": "thiirane",
+      "smarts": "[SX2r3]1[#6r3][#6r3]1",
+      "reason": "Strained ring, ring-opening",
+      "lilly_query": "het_3mem_ring.qry"
+    },
+    {
+      "name": "thiol_free",
+      "smarts": "[SX2H]",
+      "reason": "Oxidation-prone, dimerizes to disulfide on standing",
+      "lilly_query": "N/A"
+    },
+    {
+      "name": "disulfide",
+      "smarts": "[SX2][SX2]",
+      "reason": "Redox-labile bond, cleaves under mild reducing conditions",
+      "lilly_query": "ss.qry"
+    },
+    {
+      "name": "thioester",
+      "smarts": "[#6][CX3](=[OX1])[SX2][#6]",
+      "reason": "Hydrolytically labile, prone to transthioesterification",
+      "lilly_query": "thioester.qry"
+    },
+    {
+      "name": "activated_ester",
+      "smarts": "[CX3](=[OX1])[OX2][$(c1ncccc1),$(c1ccncc1),$(C(F)(F)F)]",
+      "reason": "Activated esters react with amines during handling",
+      "lilly_query": "activated_ester.qry"
+    },
+    {
+      "name": "halomethyl_ketone",
+      "smarts": "[CX3](=[OX1])[CH2][F,Cl,Br,I]",
+      "reason": "Alkylating agent, reacts with nucleophiles",
+      "lilly_query": "halomethyl_ketone.qry"
+    },
+    {
+      "name": "vinyl_sulfone",
+      "smarts": "[CH2]=[CH][SX4](=[OX1])=[OX1]",
+      "reason": "Michael acceptor, reacts with thiols",
+      "lilly_query": "vinyl_sulfone_2.qry"
+    },
+    {
+      "name": "schiff_base",
+      "smarts": "[NX2]=[CX3]([#6])[#6]",
+      "reason": "Hydrolytically unstable imine",
+      "lilly_query": "schiff_base.qry"
+    },
+    {
+      "name": "enamine",
+      "smarts": "[NX3][CX3]=[CX3]",
+      "reason": "Hydrolytically unstable, tautomerizes",
+      "lilly_query": "enamine.qry"
+    },
+    {
+      "name": "nitrosamine",
+      "smarts": "[NX3][NX2]=[OX1]",
+      "reason": "Known mutagen, carcinogenic",
+      "lilly_query": "nitrosamine.qry"
+    },
+    {
+      "name": "acylated_enol",
+      "smarts": "[CX3](=[OX1])[OX2][CX3]=[CX3]",
+      "reason": "Hydrolytically labile vinyl ester",
+      "lilly_query": "acylated_enol.qry"
+    },
+    {
+      "name": "vinyl_nitro",
+      "smarts": "[CX3]=[CX3][NX3](=[OX1])=[OX1]",
+      "reason": "Unstable, decomposes",
+      "lilly_query": "vinyl_nitro.qry"
+    },
+    {
+      "name": "alkyl_iodide",
+      "smarts": "[CX4][I]",
+      "reason": "Strong alkylating agent, reacts with nucleophiles",
+      "lilly_query": "alkyl_iodide.qry"
+    },
+    {
+      "name": "nitrous_ester",
+      "smarts": "[#6][OX2][NX2]=[OX1]",
+      "reason": "Unstable nitrite ester",
+      "lilly_query": "nitrous_ester.qry"
+    },
+    {
+      "name": "thiomethyl_ketone",
+      "smarts": "[CX3](=[OX1])[CH2][SX2]",
+      "reason": "Thioether alpha to carbonyl, prone to elimination",
+      "lilly_query": "thiomethyl_ketone.qry"
+    }
+  ],
+  "fg_incompatibility": {
+    "pd_catalyzed": {
+      "description": "Pd(0)/Pd(II) catalytic cycle is poisoned by strong sigma-donors and competing nucleophilic coupling partners",
+      "reaction_ids": [
+        "hartenfeller_31",
+        "hartenfeller_33",
+        "hartenfeller_41",
+        "hartenfeller_42",
+        "hartenfeller_43",
+        "hartenfeller_46",
+        "hartenfeller_51"
+      ],
+      "exclusions_on_any_bb": [
+        {
+          "smarts": "[SX2H]",
+          "reason": "Pd catalyst poisoning by free thiol (Roughley & Jordan 2011)"
+        },
+        {
+          "smarts": "[#16X2H1]",
+          "reason": "Pd catalyst poisoning by thiol (alt pattern)"
+        },
+        {
+          "smarts": "[NX3]=[NX2]",
+          "reason": "Azo groups poison Pd catalyst (BH amination lit)"
+        },
+        {
+          "smarts": "[PX3]",
+          "reason": "Free phosphine competes with ligand for Pd coordination"
+        },
+        {
+          "smarts": "[CX3](=[OX1])[F,Cl,Br,I]",
+          "reason": "Acyl halide reacts with Pd intermediates"
+        },
+        {
+          "smarts": "[NX2]=[CX2]=[OX1]",
+          "reason": "Isocyanate reacts with Pd-amido intermediates"
+        }
+      ],
+      "exclusions_on_halide_bb": [
+        {
+          "smarts": "[NH2;$([NH2]c)]",
+          "reason": "Free aryl amine on halide BB causes competing Buchwald side-reaction"
+        },
+        {
+          "smarts": "[OH;$([OH]c)]",
+          "reason": "Free aryl hydroxyl on halide BB causes competing O-arylation"
+        }
+      ]
+    },
+    "amide_coupling": {
+      "description": "COOH activation (Schotten-Baumann, sulfonamide) produces electrophilic intermediates that react with competing nucleophiles",
+      "reaction_ids": [
+        "hartenfeller_47",
+        "hartenfeller_48"
+      ],
+      "exclusions_on_acid_bb": [
+        {
+          "smarts": "[CH1;R0](=O)",
+          "reason": "Aldehyde on acid BB competes for amine via imine formation"
+        },
+        {
+          "smarts": "[NH2;!$(NC=O)]",
+          "reason": "Free amine on acid BB causes self-acylation / oligomerization"
+        }
+      ],
+      "exclusions_on_amine_bb": [
+        {
+          "smarts": "[CH2][OH]",
+          "reason": "Primary alcohol on amine BB causes competing ester formation"
+        },
+        {
+          "smarts": "[SX2H]",
+          "reason": "Free thiol on amine BB reacts faster than amine with acyl chloride"
+        },
+        {
+          "smarts": "[CH1;R0](=O)",
+          "reason": "Aldehyde on amine BB causes imine formation with amine BB itself"
+        }
+      ]
+    },
+    "reductive_amination": {
+      "description": "NaBH3CN / NaBH(OAc)3 reduces imines but also reduces other carbonyls non-selectively",
+      "reaction_ids": [
+        "hartenfeller_30"
+      ],
+      "exclusions_on_any_bb": [
+        {
+          "smarts": "[NX2]=[CX2]=[OX1]",
+          "reason": "Isocyanate reacts with amine before imine formation"
+        },
+        {
+          "smarts": "[CX3](=[OX1])[F,Cl,Br,I]",
+          "reason": "Acyl halide reacts with amine before aldehyde"
+        },
+        {
+          "smarts": "[OX2r3]1[#6r3][#6r3]1",
+          "reason": "Epoxide ring-opens under reductive amination conditions"
+        }
+      ],
+      "exclusions_on_amine_bb": [
+        {
+          "smarts": "[CX3H1](=O)",
+          "reason": "Extra aldehyde on amine BB causes self-reductive amination"
+        },
+        {
+          "smarts": "[CX3](=O)[CX3](=O)",
+          "reason": "1,2-dicarbonyl causes non-selective multiple imine formation"
+        }
+      ]
+    },
+    "base_sensitive": {
+      "description": "Strong base conditions (Wittig ylide formation, Grignard organometallic) are incompatible with acidic protons and strained electrophiles",
+      "reaction_ids": [
+        "hartenfeller_44",
+        "hartenfeller_45",
+        "hartenfeller_50"
+      ],
+      "exclusions_on_any_bb": [
+        {
+          "smarts": "[C]1[C](=O)[O]1",
+          "reason": "beta-lactone ring-opening under basic/organometallic conditions"
+        },
+        {
+          "smarts": "[C]1[C](=O)[N]1",
+          "reason": "beta-lactam ring-opening under basic/organometallic conditions"
+        },
+        {
+          "smarts": "[OX2H]",
+          "reason": "Acidic proton quenches Grignard/Wittig reagent (Clayden ch.10)"
+        },
+        {
+          "smarts": "[NX3H2;!$(Nc)]",
+          "reason": "Primary aliphatic amine proton quenches Grignard reagent"
+        },
+        {
+          "smarts": "[SX2H]",
+          "reason": "Thiol proton quenches Grignard reagent"
+        },
+        {
+          "smarts": "[CX3H1](=O)",
+          "reason": "Aldehyde reacts with Grignard before intended electrophile (Clayden ch.10)"
+        },
+        {
+          "smarts": "[NX2]=[CX2]=[OX1]",
+          "reason": "Isocyanate reacts with Grignard reagent"
+        }
+      ]
+    },
+    "click_chemistry": {
+      "description": "CuAAC and RuAAC click reactions are sensitive to competing coordination and reduction",
+      "reaction_ids": [
+        "hartenfeller_12",
+        "hartenfeller_13",
+        "hartenfeller_14"
+      ],
+      "exclusions_on_any_bb": [
+        {
+          "smarts": "[SX2H]",
+          "reason": "Thiol coordinates Cu(I) catalyst, reduces efficacy"
+        },
+        {
+          "smarts": "[PX3]",
+          "reason": "Phosphine reduces Cu(I) to inactive Cu(0)"
+        }
+      ]
+    },
+    "williamson_ether": {
+      "description": "Williamson ether synthesis uses strong base (NaH, KOH) to generate alkoxide",
+      "reaction_ids": [
+        "hartenfeller_29"
+      ],
+      "exclusions_on_any_bb": [
+        {
+          "smarts": "[CX3H1](=O)",
+          "reason": "Aldehyde competes via Cannizzaro or aldol reaction under base"
+        },
+        {
+          "smarts": "[CX3](=[OX1])[OX2H1]",
+          "reason": "Carboxylic acid neutralizes base, prevents alkoxide formation"
+        },
+        {
+          "smarts": "[NX3H2;!$(Nc)]",
+          "reason": "Aliphatic amine competes as nucleophile in SN2"
+        }
+      ]
+    },
+    "mitsunobu": {
+      "description": "Mitsunobu reactions use DIAD/DEAD + PPh3, sensitive to multiple acidic NH/OH groups",
+      "reaction_ids": [
+        "hartenfeller_34",
+        "hartenfeller_35",
+        "hartenfeller_36",
+        "hartenfeller_37",
+        "hartenfeller_38",
+        "hartenfeller_39",
+        "hartenfeller_40"
+      ],
+      "exclusions_on_any_bb": [
+        {
+          "smarts": "[CX3](=[OX1])[OX2H1]",
+          "reason": "Carboxylic acid competes as second nucleophile under Mitsunobu"
+        },
+        {
+          "smarts": "[SX2H]",
+          "reason": "Thiol competes as nucleophile under Mitsunobu conditions"
+        }
+      ]
+    }
+  },
+  "product_caps": {
+    "max_mw_1step": 600,
+    "max_mw_2step": 800,
+    "max_heavy_atoms": 50
+  },
+  "steric_hindrance": {
+    "description": "Both reactants having severely hindered reactive sites drastically reduces yield. Reject pair only when BOTH reactants match a hindrance pattern.",
+    "patterns": [
+      {
+        "name": "ortho_disubstituted_aryl_halide",
+        "smarts": "[cH0]([Cl,Br,I,F])([cH0;!cH0])c",
+        "reason": "ortho,ortho-disubstituted aryl halide, very poor cross-coupling yield (Roughley & Jordan 2011)",
+        "note": "Suzuki/BH coupling of 2,6-disubstituted aryl halides typically <20% yield"
+      },
+      {
+        "name": "neopentyl_carbon",
+        "smarts": "[CX4]([CX4])([CX4])([CX4])",
+        "reason": "Quaternary carbon adjacent to reactive site, extreme steric shielding"
+      },
+      {
+        "name": "tert_butyl_adjacent_to_reactive",
+        "smarts": "[CX4]([CH3])([CH3])[CH3]",
+        "reason": "tert-butyl group creates significant steric bulk near coupling site"
+      },
+      {
+        "name": "ortho_disubstituted_boronic_acid",
+        "smarts": "[cH0]([B](O)O)([cH0;!cH0])c",
+        "reason": "ortho,ortho-disubstituted boronic acid, poor transmetalation in Suzuki (Barder et al.)"
+      }
+    ]
+  }
+}
