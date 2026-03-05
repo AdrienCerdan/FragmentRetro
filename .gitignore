@@ -56,8 +56,8 @@ src/fragmentation/ringBRICS.py
 data/buyables/
 data/precompute/
 benchmark_*
-aizynthfinder
 ./*.json
 *.png
 results.json
 results.json
+aizynthfinder/
